@@ -41,32 +41,28 @@ $paginationSummaryTpl = $lang['pagination_summary'] ?? 'Page %1$d / %2$d (Total 
 $banPaginationAria = $lang['ban_pagination_aria'] ?? '封禁列表分页';
 
 $banSearchValue = trim((string) ($bansView['search'] ?? ''));
-$banCurrentUrl = function_exists('cfmod_admin_current_url_without_action') ? cfmod_admin_current_url_without_action() : ($_SERVER['REQUEST_URI'] ?? '');
-$banUrlParts = $banCurrentUrl !== '' ? @parse_url($banCurrentUrl) : false;
-$banPath = ($banUrlParts && !empty($banUrlParts['path'])) ? $banUrlParts['path'] : ($_SERVER['PHP_SELF'] ?? '');
-$banQueryArgs = [];
-if ($banUrlParts && !empty($banUrlParts['query'])) {
-  parse_str($banUrlParts['query'], $banQueryArgs);
-}
-unset($banQueryArgs['ban_page']);
-$banQueryString = http_build_query($banQueryArgs);
-if ($banPath === '') {
-  $banPath = 'addonmodules.php';
-}
-$banPageUrlTemplate = $banPath;
-if ($banQueryString !== '') {
-  $banPageUrlTemplate .= '?' . $banQueryString . '&ban_page=%d#ban-management';
-} else {
-  $banPageUrlTemplate .= '?ban_page=%d#ban-management';
-}
-$banResetArgs = $banQueryArgs;
-unset($banResetArgs['ban_search'], $banResetArgs['ban_page']);
-$banResetQuery = http_build_query($banResetArgs);
-$banResetUrl = $banPath;
-if ($banResetQuery !== '') {
-  $banResetUrl .= '?' . $banResetQuery;
-}
-$banResetUrl .= '#ban-management';
+
+// Build pagination URL helper
+$banBuildPageUrl = static function (int $page) use ($banSearchValue): string {
+    $params = $_GET ?? [];
+    $params['module'] = 'domain_hub';
+    unset($params['ban_page']);
+    if ($page > 1) {
+        $params['ban_page'] = $page;
+    }
+    if ($banSearchValue !== '') {
+        $params['ban_search'] = $banSearchValue;
+    } else {
+        unset($params['ban_search']);
+    }
+    return '?' . http_build_query($params) . '#ban-management';
+};
+
+// Build reset URL (clears search and page)
+$banResetParams = $_GET ?? [];
+$banResetParams['module'] = 'domain_hub';
+unset($banResetParams['ban_search'], $banResetParams['ban_page']);
+$banResetUrl = '?' . http_build_query($banResetParams) . '#ban-management';
 ?>
 
 <div class="col-md-6">
@@ -123,13 +119,7 @@ $banResetUrl .= '#ban-management';
       </form>
 
       <form method="get" class="row g-2 align-items-center mb-3">
-        <input type="hidden" name="m" value="<?php echo htmlspecialchars($_GET['m'] ?? 'domain_hub'); ?>">
-        <?php
-        foreach ($banQueryArgs as $key => $val) {
-          if (in_array($key, ['m', 'ban_search', 'ban_page'], true)) { continue; }
-          echo '<input type="hidden" name="' . htmlspecialchars($key, ENT_QUOTES) . '" value="' . htmlspecialchars(is_array($val) ? '' : (string) $val, ENT_QUOTES) . '">';
-        }
-        ?>
+        <input type="hidden" name="module" value="domain_hub">
         <div class="col-sm-6 col-md-4">
           <input type="text" name="ban_search" class="form-control" placeholder="<?php echo htmlspecialchars($banSearchPlaceholder); ?>" value="<?php echo htmlspecialchars($banSearchValue); ?>">
         </div>
@@ -216,14 +206,14 @@ $banResetUrl .= '#ban-management';
               <?php if ($banPage <= 1): ?>
                 <span class="page-link"><?php echo htmlspecialchars($prevLabel); ?></span>
               <?php else: ?>
-                <a class="page-link" href="<?php echo htmlspecialchars(sprintf($banPageUrlTemplate, $banPage - 1)); ?>"><?php echo htmlspecialchars($prevLabel); ?></a>
+                <a class="page-link" href="<?php echo htmlspecialchars($banBuildPageUrl($banPage - 1)); ?>"><?php echo htmlspecialchars($prevLabel); ?></a>
               <?php endif; ?>
             </li>
             <li class="page-item <?php echo $banPage >= $banTotalPages ? 'disabled' : ''; ?>">
               <?php if ($banPage >= $banTotalPages): ?>
                 <span class="page-link"><?php echo htmlspecialchars($nextLabel); ?></span>
               <?php else: ?>
-                <a class="page-link" href="<?php echo htmlspecialchars(sprintf($banPageUrlTemplate, $banPage + 1)); ?>"><?php echo htmlspecialchars($nextLabel); ?></a>
+                <a class="page-link" href="<?php echo htmlspecialchars($banBuildPageUrl($banPage + 1)); ?>"><?php echo htmlspecialchars($nextLabel); ?></a>
               <?php endif; ?>
             </li>
           </ul>
