@@ -74,7 +74,7 @@ $banResetUrl .= '#ban-management';
     <div class="card-body">
       <h5 class="card-title mb-3"><i class="fas fa-user-slash"></i> <?php echo htmlspecialchars($title); ?></h5>
       <form method="post" class="mb-3">
-
+        <input type="hidden" name="action" value="ban_user">
         <div class="row g-2">
           <div class="col-md-5">
             <input type="text" name="user_email" class="form-control" placeholder="<?php echo htmlspecialchars($banEmailLabel); ?>" required title="输入用户邮箱或子域名（如 test.example.com）">
@@ -142,7 +142,7 @@ $banResetUrl .= '#ban-management';
       </form>
 
       <div class="table-responsive">
-
+        <table class="table table-striped table-hover mb-0">
           <thead>
             <tr>
               <th>用户</th>
@@ -150,7 +150,7 @@ $banResetUrl .= '#ban-management';
               <th>类型</th>
               <th>到期时间</th>
               <th>封禁时间</th>
-              <th style="width: 200px">操作</th>
+              <th style="min-width: 220px">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -159,44 +159,39 @@ $banResetUrl .= '#ban-management';
               <tr>
                 <td>
                   <?php echo htmlspecialchars(($banned->firstname ?? '') . ' ' . ($banned->lastname ?? '')); ?><br>
-                  <span class="text-muted"><?php echo htmlspecialchars($banned->email ?? ''); ?></span>
+                  <span class="text-muted small"><?php echo htmlspecialchars($banned->email ?? ''); ?></span>
                 </td>
-                <td><?php echo htmlspecialchars($banned->ban_reason ?? ''); ?></td>
+                <td><span class="text-truncate d-inline-block" style="max-width: 150px;" title="<?php echo htmlspecialchars($banned->ban_reason ?? ''); ?>"><?php echo htmlspecialchars($banned->ban_reason ?? ''); ?></span></td>
                 <?php $banTypeKey = strtolower((string) ($banned->ban_type ?? 'permanent')); ?>
                 <td>
                   <span class="badge bg-secondary">
                     <?php echo htmlspecialchars($banTypeMap[$banTypeKey] ?? $banTypeMap['permanent']); ?>
                   </span>
                 </td>
-                <td><?php echo htmlspecialchars($banned->ban_expires_at ?? '-'); ?></td>
-                <td><?php echo date('Y-m-d H:i', strtotime($banned->banned_at ?? 'now')); ?></td>
+                <td class="small"><?php echo htmlspecialchars($banned->ban_expires_at ?? '-'); ?></td>
+                <td class="small"><?php echo date('Y-m-d H:i', strtotime($banned->banned_at ?? 'now')); ?></td>
                 <td>
-                  <div class="d-flex flex-column gap-2">
-                    <div class="d-flex flex-wrap gap-2">
-                      <form method="post">
-                        <input type="hidden" name="action" value="unban_user">
-                        <input type="hidden" name="userid" value="<?php echo intval($banned->userid); ?>">
-                        <button type="submit" class="btn btn-sm btn-success"><?php echo htmlspecialchars($unbanButton); ?></button>
-                      </form>
-                      <?php if (($banned->ban_type ?? '') === 'temporary' || ($banned->ban_type ?? '') === 'weekly'): ?>
-                      <form method="post">
-                        <input type="hidden" name="action" value="ban_user">
-                        <input type="hidden" name="user_email" value="<?php echo htmlspecialchars($banned->email ?? ''); ?>">
-                        <input type="hidden" name="ban_type" value="temporary">
-                        <input type="hidden" name="ban_days" value="7">
-                        <input type="hidden" name="ban_reason" value="续期封禁：7天">
-                        <button type="submit" class="btn btn-sm btn-outline-danger"><?php echo htmlspecialchars($extendLabel); ?></button>
-                      </form>
-                      <?php endif; ?>
-                    </div>
-                    <form method="post" class="d-flex flex-wrap gap-2 align-items-center" onsubmit="return confirm('将把该封禁用户的所有免费域名解析A改为指定IPv4，其它记录将被删除。确认执行？');">
+                  <div class="d-flex flex-wrap gap-1 align-items-center">
+                    <form method="post" class="d-inline">
+                      <input type="hidden" name="action" value="unban_user">
+                      <input type="hidden" name="userid" value="<?php echo intval($banned->userid); ?>">
+                      <button type="submit" class="btn btn-sm btn-success"><?php echo htmlspecialchars($unbanButton); ?></button>
+                    </form>
+                    <?php if (($banned->ban_type ?? '') === 'temporary' || ($banned->ban_type ?? '') === 'weekly'): ?>
+                    <form method="post" class="d-inline">
+                      <input type="hidden" name="action" value="ban_user">
+                      <input type="hidden" name="user_email" value="<?php echo htmlspecialchars($banned->email ?? ''); ?>">
+                      <input type="hidden" name="ban_type" value="temporary">
+                      <input type="hidden" name="ban_days" value="7">
+                      <input type="hidden" name="ban_reason" value="续期封禁：7天">
+                      <button type="submit" class="btn btn-sm btn-outline-danger"><?php echo htmlspecialchars($extendLabel); ?></button>
+                    </form>
+                    <?php endif; ?>
+                    <form method="post" class="d-inline" onsubmit="return confirm('将把该封禁用户的所有免费域名解析A改为指定IPv4，其它记录将被删除。确认执行？');">
                       <input type="hidden" name="action" value="enforce_ban_dns">
                       <input type="hidden" name="userid" value="<?php echo intval($banned->userid); ?>">
-                      <div class="input-group input-group-sm flex-grow-1">
-                        <span class="input-group-text">A</span>
-                        <input type="text" name="enforce_dns_ip4" class="form-control" placeholder="IPv4（留空用默认）" value="<?php echo htmlspecialchars($defaultIp); ?>">
-                      </div>
-                      <button class="btn btn-sm btn-warning" type="submit"><?php echo htmlspecialchars($enforceButton); ?></button>
+                      <input type="hidden" name="enforce_dns_ip4" value="<?php echo htmlspecialchars($defaultIp); ?>">
+                      <button class="btn btn-sm btn-warning" type="submit" title="使用默认IP: <?php echo htmlspecialchars($defaultIp); ?>"><?php echo htmlspecialchars($enforceButton); ?></button>
                     </form>
                   </div>
                 </td>
@@ -235,6 +230,6 @@ $banResetUrl .= '#ban-management';
         </nav>
       </div>
       <?php endif; ?>
-      </div>
-      </div>
-      </div>
+    </div>
+  </div>
+</div>
