@@ -1,0 +1,35 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# Composer dependencies
+vendor/
+
+# PHP error logs
+*.log
+error_log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+
+# Node modules (if any JS build tools)
+node_modules/
+
+# PHPStorm
+.phpstorm.meta.php
+_ide_helper.php

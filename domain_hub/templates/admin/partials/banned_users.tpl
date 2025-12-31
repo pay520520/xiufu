@@ -41,32 +41,28 @@ $paginationSummaryTpl = $lang['pagination_summary'] ?? 'Page %1$d / %2$d (Total 
 $banPaginationAria = $lang['ban_pagination_aria'] ?? '封禁列表分页';
 
 $banSearchValue = trim((string) ($bansView['search'] ?? ''));
-$banCurrentUrl = function_exists('cfmod_admin_current_url_without_action') ? cfmod_admin_current_url_without_action() : ($_SERVER['REQUEST_URI'] ?? '');
-$banUrlParts = $banCurrentUrl !== '' ? @parse_url($banCurrentUrl) : false;
-$banPath = ($banUrlParts && !empty($banUrlParts['path'])) ? $banUrlParts['path'] : ($_SERVER['PHP_SELF'] ?? '');
-$banQueryArgs = [];
-if ($banUrlParts && !empty($banUrlParts['query'])) {
-  parse_str($banUrlParts['query'], $banQueryArgs);
-}
-unset($banQueryArgs['ban_page']);
-$banQueryString = http_build_query($banQueryArgs);
-if ($banPath === '') {
-  $banPath = 'addonmodules.php';
-}
-$banPageUrlTemplate = $banPath;
-if ($banQueryString !== '') {
-  $banPageUrlTemplate .= '?' . $banQueryString . '&ban_page=%d#ban-management';
-} else {
-  $banPageUrlTemplate .= '?ban_page=%d#ban-management';
-}
-$banResetArgs = $banQueryArgs;
-unset($banResetArgs['ban_search'], $banResetArgs['ban_page']);
-$banResetQuery = http_build_query($banResetArgs);
-$banResetUrl = $banPath;
-if ($banResetQuery !== '') {
-  $banResetUrl .= '?' . $banResetQuery;
-}
-$banResetUrl .= '#ban-management';
+
+// Build pagination URL helper
+$banBuildPageUrl = static function (int $page) use ($banSearchValue): string {
+    $params = $_GET ?? [];
+    $params['module'] = 'domain_hub';
+    unset($params['ban_page']);
+    if ($page > 1) {
+        $params['ban_page'] = $page;
+    }
+    if ($banSearchValue !== '') {
+        $params['ban_search'] = $banSearchValue;
+    } else {
+        unset($params['ban_search']);
+    }
+    return '?' . http_build_query($params) . '#ban-management';
+};
+
+// Build reset URL (clears search and page)
+$banResetParams = $_GET ?? [];
+$banResetParams['module'] = 'domain_hub';
+unset($banResetParams['ban_search'], $banResetParams['ban_page']);
+$banResetUrl = '?' . http_build_query($banResetParams) . '#ban-management';
 ?>
 
 <div class="col-md-6">
@@ -74,7 +70,7 @@ $banResetUrl .= '#ban-management';
     <div class="card-body">
       <h5 class="card-title mb-3"><i class="fas fa-user-slash"></i> <?php echo htmlspecialchars($title); ?></h5>
       <form method="post" class="mb-3">
-
+        <input type="hidden" name="action" value="ban_user">
         <div class="row g-2">
           <div class="col-md-5">
             <input type="text" name="user_email" class="form-control" placeholder="<?php echo htmlspecialchars($banEmailLabel); ?>" required title="输入用户邮箱或子域名（如 test.example.com）">
@@ -123,13 +119,7 @@ $banResetUrl .= '#ban-management';
       </form>
 
       <form method="get" class="row g-2 align-items-center mb-3">
-        <input type="hidden" name="m" value="<?php echo htmlspecialchars($_GET['m'] ?? 'domain_hub'); ?>">
-        <?php
-        foreach ($banQueryArgs as $key => $val) {
-          if (in_array($key, ['m', 'ban_search', 'ban_page'], true)) { continue; }
-          echo '<input type="hidden" name="' . htmlspecialchars($key, ENT_QUOTES) . '" value="' . htmlspecialchars(is_array($val) ? '' : (string) $val, ENT_QUOTES) . '">';
-        }
-        ?>
+        <input type="hidden" name="module" value="domain_hub">
         <div class="col-sm-6 col-md-4">
           <input type="text" name="ban_search" class="form-control" placeholder="<?php echo htmlspecialchars($banSearchPlaceholder); ?>" value="<?php echo htmlspecialchars($banSearchValue); ?>">
         </div>
@@ -142,7 +132,7 @@ $banResetUrl .= '#ban-management';
       </form>
 
       <div class="table-responsive">
-
+        <table class="table table-striped table-hover mb-0">
           <thead>
             <tr>
               <th>用户</th>
@@ -150,7 +140,7 @@ $banResetUrl .= '#ban-management';
               <th>类型</th>
               <th>到期时间</th>
               <th>封禁时间</th>
-              <th style="width: 200px">操作</th>
+              <th style="min-width: 220px">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -159,44 +149,39 @@ $banResetUrl .= '#ban-management';
               <tr>
                 <td>
                   <?php echo htmlspecialchars(($banned->firstname ?? '') . ' ' . ($banned->lastname ?? '')); ?><br>
-                  <span class="text-muted"><?php echo htmlspecialchars($banned->email ?? ''); ?></span>
+                  <span class="text-muted small"><?php echo htmlspecialchars($banned->email ?? ''); ?></span>
                 </td>
-                <td><?php echo htmlspecialchars($banned->ban_reason ?? ''); ?></td>
+                <td><span class="text-truncate d-inline-block" style="max-width: 150px;" title="<?php echo htmlspecialchars($banned->ban_reason ?? ''); ?>"><?php echo htmlspecialchars($banned->ban_reason ?? ''); ?></span></td>
                 <?php $banTypeKey = strtolower((string) ($banned->ban_type ?? 'permanent')); ?>
                 <td>
                   <span class="badge bg-secondary">
                     <?php echo htmlspecialchars($banTypeMap[$banTypeKey] ?? $banTypeMap['permanent']); ?>
                   </span>
                 </td>
-                <td><?php echo htmlspecialchars($banned->ban_expires_at ?? '-'); ?></td>
-                <td><?php echo date('Y-m-d H:i', strtotime($banned->banned_at ?? 'now')); ?></td>
+                <td class="small"><?php echo htmlspecialchars($banned->ban_expires_at ?? '-'); ?></td>
+                <td class="small"><?php echo date('Y-m-d H:i', strtotime($banned->banned_at ?? 'now')); ?></td>
                 <td>
-                  <div class="d-flex flex-column gap-2">
-                    <div class="d-flex flex-wrap gap-2">
-                      <form method="post">
-                        <input type="hidden" name="action" value="unban_user">
-                        <input type="hidden" name="userid" value="<?php echo intval($banned->userid); ?>">
-                        <button type="submit" class="btn btn-sm btn-success"><?php echo htmlspecialchars($unbanButton); ?></button>
-                      </form>
-                      <?php if (($banned->ban_type ?? '') === 'temporary' || ($banned->ban_type ?? '') === 'weekly'): ?>
-                      <form method="post">
-                        <input type="hidden" name="action" value="ban_user">
-                        <input type="hidden" name="user_email" value="<?php echo htmlspecialchars($banned->email ?? ''); ?>">
-                        <input type="hidden" name="ban_type" value="temporary">
-                        <input type="hidden" name="ban_days" value="7">
-                        <input type="hidden" name="ban_reason" value="续期封禁：7天">
-                        <button type="submit" class="btn btn-sm btn-outline-danger"><?php echo htmlspecialchars($extendLabel); ?></button>
-                      </form>
-                      <?php endif; ?>
-                    </div>
-                    <form method="post" class="d-flex flex-wrap gap-2 align-items-center" onsubmit="return confirm('将把该封禁用户的所有免费域名解析A改为指定IPv4，其它记录将被删除。确认执行？');">
+                  <div class="d-flex flex-wrap gap-1 align-items-center">
+                    <form method="post" class="d-inline">
+                      <input type="hidden" name="action" value="unban_user">
+                      <input type="hidden" name="userid" value="<?php echo intval($banned->userid); ?>">
+                      <button type="submit" class="btn btn-sm btn-success"><?php echo htmlspecialchars($unbanButton); ?></button>
+                    </form>
+                    <?php if (($banned->ban_type ?? '') === 'temporary' || ($banned->ban_type ?? '') === 'weekly'): ?>
+                    <form method="post" class="d-inline">
+                      <input type="hidden" name="action" value="ban_user">
+                      <input type="hidden" name="user_email" value="<?php echo htmlspecialchars($banned->email ?? ''); ?>">
+                      <input type="hidden" name="ban_type" value="temporary">
+                      <input type="hidden" name="ban_days" value="7">
+                      <input type="hidden" name="ban_reason" value="续期封禁：7天">
+                      <button type="submit" class="btn btn-sm btn-outline-danger"><?php echo htmlspecialchars($extendLabel); ?></button>
+                    </form>
+                    <?php endif; ?>
+                    <form method="post" class="d-inline" onsubmit="return confirm('将把该封禁用户的所有免费域名解析A改为指定IPv4，其它记录将被删除。确认执行？');">
                       <input type="hidden" name="action" value="enforce_ban_dns">
                       <input type="hidden" name="userid" value="<?php echo intval($banned->userid); ?>">
-                      <div class="input-group input-group-sm flex-grow-1">
-                        <span class="input-group-text">A</span>
-                        <input type="text" name="enforce_dns_ip4" class="form-control" placeholder="IPv4（留空用默认）" value="<?php echo htmlspecialchars($defaultIp); ?>">
-                      </div>
-                      <button class="btn btn-sm btn-warning" type="submit"><?php echo htmlspecialchars($enforceButton); ?></button>
+                      <input type="hidden" name="enforce_dns_ip4" value="<?php echo htmlspecialchars($defaultIp); ?>">
+                      <button class="btn btn-sm btn-warning" type="submit" title="使用默认IP: <?php echo htmlspecialchars($defaultIp); ?>"><?php echo htmlspecialchars($enforceButton); ?></button>
                     </form>
                   </div>
                 </td>
@@ -221,20 +206,20 @@ $banResetUrl .= '#ban-management';
               <?php if ($banPage <= 1): ?>
                 <span class="page-link"><?php echo htmlspecialchars($prevLabel); ?></span>
               <?php else: ?>
-                <a class="page-link" href="<?php echo htmlspecialchars(sprintf($banPageUrlTemplate, $banPage - 1)); ?>"><?php echo htmlspecialchars($prevLabel); ?></a>
+                <a class="page-link" href="<?php echo htmlspecialchars($banBuildPageUrl($banPage - 1)); ?>"><?php echo htmlspecialchars($prevLabel); ?></a>
               <?php endif; ?>
             </li>
             <li class="page-item <?php echo $banPage >= $banTotalPages ? 'disabled' : ''; ?>">
               <?php if ($banPage >= $banTotalPages): ?>
                 <span class="page-link"><?php echo htmlspecialchars($nextLabel); ?></span>
               <?php else: ?>
-                <a class="page-link" href="<?php echo htmlspecialchars(sprintf($banPageUrlTemplate, $banPage + 1)); ?>"><?php echo htmlspecialchars($nextLabel); ?></a>
+                <a class="page-link" href="<?php echo htmlspecialchars($banBuildPageUrl($banPage + 1)); ?>"><?php echo htmlspecialchars($nextLabel); ?></a>
               <?php endif; ?>
             </li>
           </ul>
         </nav>
       </div>
       <?php endif; ?>
-      </div>
-      </div>
-      </div>
+    </div>
+  </div>
+</div>
