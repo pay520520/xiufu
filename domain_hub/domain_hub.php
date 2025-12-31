@@ -1312,7 +1312,7 @@ function domain_hub_config() {
                 "Type" => "text",
                 "Size" => "3",
                 "Default" => "50",
-                "Description" => "每次自动清理任务处理的域名数量上限（建议 20-200）",
+                "Description" => "每次自动清理任务处理的域名数量上限（建议 20-200，最高 5,000）",
             ],
             "domain_cleanup_deep_delete" => [
                 "FriendlyName" => "自动清理深度删除DNS记录",
@@ -1348,7 +1348,7 @@ function domain_hub_config() {
                 "Type" => "text",
                 "Size" => "4",
                 "Default" => "150",
-                "Description" => "每个校准作业处理的子域数量，建议 100-500，数值越大单次作业耗时越久。",
+                "Description" => "每个校准作业处理的子域数量，建议 100-500，必要时可临时提升（最高 5,000），数值越大单次作业耗时越久。",
             ],
             // 邀请全局配置
             "invite_bonus_limit_global" => [

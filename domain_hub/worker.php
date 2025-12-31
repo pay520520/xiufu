@@ -389,7 +389,7 @@ function cfmod_job_calibrate_all($job, array $payload): array {
         if ($configBatch <= 0) { $configBatch = 150; }
         $batchSize = $configBatch;
     }
-    $batchSize = max(50, min(500, $batchSize));
+    $batchSize = max(50, min(5000, $batchSize));
     $cursor = intval($payload['cursor_id'] ?? 0);
     $targetRoot = strtolower(trim((string) ($payload['rootdomain'] ?? '')));
 
@@ -1097,7 +1097,7 @@ function cfmod_job_replace_root($job, array $payload = []): array {
 
     $batchSize = intval($payload['batch_size'] ?? 200);
     if ($batchSize <= 0) { $batchSize = 200; }
-    $batchSize = max(25, min(500, $batchSize));
+    $batchSize = max(25, min(5000, $batchSize));
     $cursor = intval($payload['cursor_id'] ?? 0);
 
     $settings = cfmod_get_settings();
@@ -1407,7 +1407,7 @@ function cfmod_job_transfer_root_provider($job, array $payload = []): array {
     $settings = cfmod_get_settings();
     $batchSize = intval($payload['batch_size'] ?? 200);
     if ($batchSize <= 0) { $batchSize = 200; }
-    $batchSize = max(25, min(500, $batchSize));
+    $batchSize = max(25, min(5000, $batchSize));
     $cursor = intval($payload['cursor_id'] ?? 0);
     $deleteOld = !empty($payload['delete_old_records']);
     $autoResume = !empty($payload['auto_resume']);
@@ -1757,7 +1757,7 @@ function cfmod_job_purge_root_local($job, array $payload = []): array {
     if ($batchSize <= 0) {
         $batchSize = 200;
     }
-    $batchSize = max(20, min(500, $batchSize));
+    $batchSize = max(20, min(5000, $batchSize));
 
     $cursor = intval($payload['cursor_id'] ?? 0);
 
@@ -1938,7 +1938,7 @@ function cfmod_job_reconcile_all($job, array $payload = []): array {
     $mode = (($payload['mode'] ?? 'dry') === 'fix') ? 'fix' : 'dry';
     $batchSize = intval($payload['batch_size'] ?? 150);
     if ($batchSize <= 0) { $batchSize = 150; }
-    $batchSize = max(50, min(500, $batchSize));
+    $batchSize = max(50, min(5000, $batchSize));
     $cursor = intval($payload['cursor_id'] ?? 0);
     $now = date('Y-m-d H:i:s');
 
@@ -2411,7 +2411,7 @@ function cfmod_job_cleanup_expired_subdomains($job, array $payload = []): array 
         if ($batchSize <= 0) {
             $batchSize = 50;
         }
-        $batchSize = max(1, min(500, $batchSize));
+        $batchSize = max(1, min(5000, $batchSize));
 
         $deepDeletePayload = !empty($payload['deep_delete']);
         $deepDeleteSetting = in_array(($settings['domain_cleanup_deep_delete'] ?? 'yes'), ['1','on','yes','true'], true);
