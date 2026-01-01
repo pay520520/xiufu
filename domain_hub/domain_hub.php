@@ -1312,7 +1312,7 @@ function domain_hub_config() {
                 "Type" => "text",
                 "Size" => "3",
                 "Default" => "50",
-                "Description" => "每次自动清理任务处理的域名数量上限（建议 20-200）",
+                "Description" => "每次自动清理任务处理的域名数量上限（建议 20-200，最高 5,000）",
             ],
             "domain_cleanup_deep_delete" => [
                 "FriendlyName" => "自动清理深度删除DNS记录",
@@ -1348,7 +1348,34 @@ function domain_hub_config() {
                 "Type" => "text",
                 "Size" => "4",
                 "Default" => "150",
-                "Description" => "每个校准作业处理的子域数量，建议 100-500，数值越大单次作业耗时越久。",
+                "Description" => "每个校准作业处理的子域数量，建议 100-500，必要时可临时提升（最高 5,000），数值越大单次作业耗时越久。",
+            ],
+            "renewal_notice_enabled" => [
+                "FriendlyName" => "启用到期提醒邮件",
+                "Type" => "yesno",
+                "Default" => "no",
+                "Description" => "开启后，系统将根据配置在域名到期前自动发送提醒邮件。",
+            ],
+            "renewal_notice_template" => [
+                "FriendlyName" => "提醒邮件模板",
+                "Type" => "text",
+                "Size" => "30",
+                "Default" => "Domain Expiry Reminder",
+                "Description" => "WHMCS 邮件模板名称，可在模板中使用 {$domain}、{$rootdomain}、{$fqdn}、{$expiry_date}、{$days_left}。",
+            ],
+            "renewal_notice_days_primary" => [
+                "FriendlyName" => "首次提醒（天）",
+                "Type" => "text",
+                "Size" => "4",
+                "Default" => "180",
+                "Description" => "到期前多少天发送首次提醒，留空或 0 表示不发送。",
+            ],
+            "renewal_notice_days_secondary" => [
+                "FriendlyName" => "二次提醒（天）",
+                "Type" => "text",
+                "Size" => "4",
+                "Default" => "7",
+                "Description" => "到期前多少天发送第二次提醒，留空或 0 表示不发送。",
             ],
             // 邀请全局配置
             "invite_bonus_limit_global" => [

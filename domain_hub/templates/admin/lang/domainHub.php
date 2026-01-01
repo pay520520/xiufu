@@ -19,10 +19,13 @@ return [
     'noscript_warning' => '为了防止CSRF攻击，请启用浏览器的 JavaScript 后再执行敏感操作。',
     'js_batch_delete_empty' => '请选择要删除的记录',
     'js_batch_delete_confirm' => '确定要删除选中的 %d 条记录吗？此操作不可恢复！',
+    'js_batch_expiry_selection_missing' => '请选择需要调整到期的子域名',
+    'js_batch_expiry_date_required' => '请先填写新的到期时间',
+    'js_batch_expiry_extend_required' => '请填写延长天数（至少 1 天）',
     'js_number_required' => '请输入数字！',
     'js_number_invalid' => '请输入有效的数字（只能包含0-9）！',
-    'js_number_leading_zero' => '数字不能以0开头！',
-    'js_number_min' => '数值不能小于 %d！',
+        'js_number_leading_zero' => '数字不能以0开头！',
+
     'js_number_max' => '数值不能超过 %d！',
     'js_error_invite_prefix' => '邀请上限错误：',
     'js_error_quota_prefix' => '基础配额错误：',
@@ -264,8 +267,24 @@ return [
     'runtime_orphan_cursor_current' => '当前默认游标：%s',
     'runtime_orphan_cursor_list' => '各根域游标：%s',
 
+    'renewal_notice_title' => '域名到期提醒',
+    'renewal_notice_enable' => '启用到期提醒邮件',
+    'renewal_notice_template_label' => '邮件模板名称',
+    'renewal_notice_template_hint' => '模板可使用 {$domain}、{$rootdomain}、{$fqdn}、{$expiry_date}、{$days_left}',
+    'renewal_notice_days_primary_label' => '首次提醒（天）',
+    'renewal_notice_days_secondary_label' => '二次提醒（天）',
+    'renewal_notice_days_hint' => '输入正整数天数，留空或 0 表示关闭',
+    'renewal_notice_save_button' => '保存到期提醒设置',
+    'renewal_notice_test_title' => '测试发送',
+    'renewal_notice_test_domain_label' => '子域名',
+    'renewal_notice_test_id_label' => '子域名 ID',
+    'renewal_notice_test_days_label' => '提醒天数',
+    'renewal_notice_test_email_label' => '覆盖收件邮箱（可选）',
+    'renewal_notice_test_button' => '发送测试邮件',
+    'renewal_notice_variables_hint' => '{$domain} / {$rootdomain} / {$fqdn} / {$expiry_date} / {$days_left}',
+
     // Announcements
-    'announcement_card_title' => '后台公告',
+
     'announcement_enable_label' => '启用公告',
 
     'announcement_title_label' => '标题',

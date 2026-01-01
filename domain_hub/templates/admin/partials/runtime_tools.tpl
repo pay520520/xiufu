@@ -88,6 +88,27 @@ $orphanCursorReset = $lang['runtime_orphan_cursor_reset'] ?? '从头开始';
 $orphanCursorCurrentFmt = $lang['runtime_orphan_cursor_current'] ?? '当前默认游标：%s';
 $orphanCursorListFmt = $lang['runtime_orphan_cursor_list'] ?? '各根域游标：%s';
 
+$renewalCardTitle = $lang['renewal_notice_title'] ?? '域名到期提醒';
+$renewalEnableLabel = $lang['renewal_notice_enable'] ?? '启用到期提醒邮件';
+$renewalTemplateLabel = $lang['renewal_notice_template_label'] ?? '邮件模板名称';
+$renewalDaysPrimaryLabel = $lang['renewal_notice_days_primary_label'] ?? '首次提醒（天）';
+$renewalDaysSecondaryLabel = $lang['renewal_notice_days_secondary_label'] ?? '二次提醒（天）';
+$renewalDaysHint = $lang['renewal_notice_days_hint'] ?? '输入正整数天数，留空或 0 表示关闭';
+$renewalTemplateHint = $lang['renewal_notice_template_hint'] ?? '模板可使用 {$domain}、{$rootdomain}、{$fqdn}、{$expiry_date}、{$days_left}';
+$renewalSaveLabel = $lang['renewal_notice_save_button'] ?? '保存到期提醒设置';
+$renewalTestTitle = $lang['renewal_notice_test_title'] ?? '测试发送';
+$renewalTestDomainLabel = $lang['renewal_notice_test_domain_label'] ?? '子域名';
+$renewalTestIdLabel = $lang['renewal_notice_test_id_label'] ?? '子域名ID';
+$renewalTestDaysLabel = $lang['renewal_notice_test_days_label'] ?? '提醒天数';
+$renewalTestEmailLabel = $lang['renewal_notice_test_email_label'] ?? '覆盖收件邮箱（可选）';
+$renewalTestButton = $lang['renewal_notice_test_button'] ?? '发送测试邮件';
+$renewalVariablesHint = $lang['renewal_notice_variables_hint'] ?? '{$domain} / {$rootdomain} / {$fqdn} / {$expiry_date} / {$days_left}';
+
+$renewalEnabledSetting = in_array($module_settings['renewal_notice_enabled'] ?? '0', ['1','on','yes','true'], true);
+$renewalTemplateName = $module_settings['renewal_notice_template'] ?? '';
+$renewalDay1Setting = $module_settings['renewal_notice_days_primary'] ?? '';
+$renewalDay2Setting = $module_settings['renewal_notice_days_secondary'] ?? '';
+
 $orphanSummary = $runtimeView['orphanCursors'] ?? ['default' => 0, 'list' => []];
 $orphanCursorDefaultValue = intval($orphanSummary['default'] ?? 0);
 $orphanCursorList = $orphanSummary['list'] ?? [];
@@ -330,8 +351,8 @@ $cfmodOrphanRootOptionsHtml = implode("\n", $orphanRootOptions);
       </div>
       <div class="col-12 col-md-4">
         <label class="form-label"><?php echo htmlspecialchars($cleanupBatch); ?></label>
-        <input type="number" class="form-control" name="batch_size" min="20" max="500" value="200">
-        <small class="text-muted">建议 20-500，值越大单次处理的记录越多。</small>
+        <input type="number" class="form-control" name="batch_size" min="20" max="5000" value="200">
+        <small class="text-muted">建议 20-500，特殊场景可临时提升（最高 5,000）。值越大单次处理的记录越多。</small>
       </div>
       <div class="col-12 col-md-4 d-flex align-items-center">
         <div class="form-check form-switch mt-4">
@@ -344,6 +365,64 @@ $cfmodOrphanRootOptionsHtml = implode("\n", $orphanRootOptions);
       </div>
       <div class="col-12">
         <button type="submit" class="btn btn-danger"><i class="fas fa-trash-alt me-1"></i> <?php echo htmlspecialchars($cleanupButton); ?></button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card mb-4" id="renewal-notice">
+  <div class="card-body">
+    <h5 class="card-title mb-3"><i class="fas fa-envelope-open-text"></i> <?php echo htmlspecialchars($renewalCardTitle); ?></h5>
+    <form method="post" class="row g-3 align-items-end mb-3">
+      <input type="hidden" name="action" value="save_renewal_notice_settings">
+      <div class="col-12 col-md-3">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="renewal_notice_enabled" name="renewal_notice_enabled" value="1" <?php echo $renewalEnabledSetting ? 'checked' : ''; ?>>
+          <label class="form-check-label" for="renewal_notice_enabled"><?php echo htmlspecialchars($renewalEnableLabel); ?></label>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label" for="renewal_notice_template"><?php echo htmlspecialchars($renewalTemplateLabel); ?></label>
+        <input type="text" class="form-control" id="renewal_notice_template" name="renewal_notice_template" value="<?php echo htmlspecialchars($renewalTemplateName); ?>" placeholder="Domain Expiry Reminder">
+        <small class="text-muted"><?php echo htmlspecialchars($renewalTemplateHint); ?></small>
+      </div>
+      <div class="col-12 col-md-2">
+        <label class="form-label" for="renewal_notice_days_primary"><?php echo htmlspecialchars($renewalDaysPrimaryLabel); ?></label>
+        <input type="number" class="form-control" id="renewal_notice_days_primary" name="renewal_notice_days_primary" min="0" value="<?php echo htmlspecialchars($renewalDay1Setting); ?>" placeholder="180">
+        <small class="text-muted d-block"><?php echo htmlspecialchars($renewalDaysHint); ?></small>
+      </div>
+      <div class="col-12 col-md-2">
+        <label class="form-label" for="renewal_notice_days_secondary"><?php echo htmlspecialchars($renewalDaysSecondaryLabel); ?></label>
+        <input type="number" class="form-control" id="renewal_notice_days_secondary" name="renewal_notice_days_secondary" min="0" value="<?php echo htmlspecialchars($renewalDay2Setting); ?>" placeholder="7">
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-primary"><?php echo htmlspecialchars($renewalSaveLabel); ?></button>
+      </div>
+    </form>
+    <p class="text-muted small mb-3"><i class="fas fa-info-circle"></i> <?php echo htmlspecialchars($renewalVariablesHint); ?></p>
+
+    <hr>
+    <h6 class="mb-3"><?php echo htmlspecialchars($renewalTestTitle); ?></h6>
+    <form method="post" class="row g-3 align-items-end">
+      <input type="hidden" name="action" value="admin_test_renewal_notice">
+      <div class="col-12 col-md-4">
+        <label class="form-label" for="test_subdomain"><?php echo htmlspecialchars($renewalTestDomainLabel); ?></label>
+        <input type="text" class="form-control" id="test_subdomain" name="test_subdomain" placeholder="foo.example.com">
+      </div>
+      <div class="col-12 col-md-2">
+        <label class="form-label" for="test_subdomain_id"><?php echo htmlspecialchars($renewalTestIdLabel); ?></label>
+        <input type="number" class="form-control" id="test_subdomain_id" name="test_subdomain_id" min="0" placeholder="ID">
+      </div>
+      <div class="col-12 col-md-2">
+        <label class="form-label" for="test_notice_days"><?php echo htmlspecialchars($renewalTestDaysLabel); ?></label>
+        <input type="number" class="form-control" id="test_notice_days" name="test_notice_days" min="1" placeholder="<?php echo htmlspecialchars($renewalDay1Setting ?: '180'); ?>">
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label" for="test_override_email"><?php echo htmlspecialchars($renewalTestEmailLabel); ?></label>
+        <input type="email" class="form-control" id="test_override_email" name="test_override_email" placeholder="admin@example.com">
+      </div>
+      <div class="col-12 col-md-1 d-grid">
+        <button type="submit" class="btn btn-outline-primary"><?php echo htmlspecialchars($renewalTestButton); ?></button>
       </div>
     </form>
   </div>
@@ -367,7 +446,7 @@ $cfmodOrphanRootOptionsHtml = implode("\n", $orphanRootOptions);
       </div>
       <div class="col-12 col-md-4">
         <label class="form-label" for="cf-orphan-limit"><?php echo htmlspecialchars($orphanLimitLabel); ?></label>
-        <input type="number" class="form-control" id="cf-orphan-limit" name="orphan_subdomain_limit" min="10" max="500" value="100">
+        <input type="number" class="form-control" id="cf-orphan-limit" name="orphan_subdomain_limit" min="10" max="5000" value="100">
       </div>
       <div class="col-12 col-md-4">
         <label class="form-label" for="cf-orphan-cursor-mode"><?php echo htmlspecialchars($orphanCursorLabel); ?></label>

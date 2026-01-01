@@ -93,10 +93,13 @@ class CfAdminActionService
         'admin_set_user_quota' => [self::class, 'handleAdminSetUserQuota'],
         'update_user_quota' => [self::class, 'handleUpdateUserQuota'],
         'admin_adjust_expiry' => [self::class, 'handleAdminAdjustExpiry'],
+        'save_renewal_notice_settings' => [self::class, 'handleSaveRenewalNoticeSettings'],
+        'admin_test_renewal_notice' => [self::class, 'handleTestRenewalNotice'],
         'reset_module' => [self::class, 'handleResetModule'],
         'batch_delete' => [self::class, 'handleBatchDelete'],
+        'batch_adjust_expiry' => [self::class, 'handleBatchAdjustExpiry'],
         'scan_orphan_records' => [self::class, 'handleScanOrphanRecords'],
-        'migrate_invite_registration_existing_users' => [self::class, 'handleMigrateInviteRegistrationExistingUsers'],
+
     ];
 
     public static function supports(string $action): bool
@@ -779,7 +782,7 @@ class CfAdminActionService
         if ($batchSize <= 0) {
             $batchSize = 200;
         }
-        $batchSize = max(25, min(500, $batchSize));
+        $batchSize = max(25, min(5000, $batchSize));
         $deleteOld = ($_POST['transfer_delete_old'] ?? '') === '1';
         $pauseRegistration = ($_POST['transfer_pause_registration'] ?? '') === '1';
         $autoResume = ($_POST['transfer_auto_resume'] ?? '1') === '1';
@@ -984,7 +987,7 @@ class CfAdminActionService
                 self::flash('未找到根域名 ' . $targetRoot . ' 下的子域名', 'warning');
                 self::redirect(self::HASH_ROOT_WHITELIST);
             }
-            $batchSize = max(20, min(500, ($batchSizeInput > 0 ? $batchSizeInput : 200)));
+            $batchSize = max(20, min(5000, ($batchSizeInput > 0 ? $batchSizeInput : 200)));
             $payload = [
                 'rootdomain' => $targetRoot,
                 'batch_size' => $batchSize,
@@ -2762,12 +2765,234 @@ class CfAdminActionService
         self::redirect(self::HASH_SUBDOMAINS);
     }
 
+    private static function handleBatchAdjustExpiry(): void
+    {
+        $selected = $_POST['selected_ids'] ?? [];
+        if (!is_array($selected) || count($selected) === 0) {
+            self::flash('请选择要调整的子域名', 'warning');
+            self::redirect(self::HASH_SUBDOMAINS);
+        }
+        $ids = [];
+        foreach ($selected as $rawId) {
+            $id = intval($rawId);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        $ids = array_values(array_unique($ids));
+        if (empty($ids)) {
+            self::flash('请选择要调整的子域名', 'warning');
+            self::redirect(self::HASH_SUBDOMAINS);
+        }
+        $mode = (string) ($_POST['batch_expiry_mode'] ?? 'set');
+        if (!in_array($mode, ['set', 'extend', 'never'], true)) {
+            $mode = 'set';
+        }
+        $targetTimestamp = null;
+        $extendDays = null;
+        if ($mode === 'set') {
+            $inputRaw = trim((string) ($_POST['expires_at_input'] ?? ''));
+            if ($inputRaw === '') {
+                self::flashError('请输入新的到期时间');
+                self::redirect(self::HASH_SUBDOMAINS);
+            }
+            $parsedTs = strtotime(str_replace('T', ' ', $inputRaw));
+            if ($parsedTs === false) {
+                self::flashError('无法解析到期时间，请确认格式');
+                self::redirect(self::HASH_SUBDOMAINS);
+            }
+            $targetTimestamp = $parsedTs;
+        } elseif ($mode === 'extend') {
+            $extendDays = intval($_POST['extend_days'] ?? 0);
+            if ($extendDays <= 0) {
+                self::flashError('请输入有效的延长天数（至少 1 天）');
+                self::redirect(self::HASH_SUBDOMAINS);
+            }
+        }
+
+        try {
+            $records = Capsule::table('mod_cloudflare_subdomain')
+                ->whereIn('id', $ids)
+                ->get();
+            $items = self::normalizeRecordList($records);
+            if (empty($items)) {
+                self::flash('未找到需要调整的子域名，请刷新页面后重试。', 'warning');
+                self::redirect(self::HASH_SUBDOMAINS);
+            }
+            $now = date('Y-m-d H:i:s');
+            $updated = 0;
+            $skipped = 0;
+            foreach ($items as $record) {
+                $subId = intval($record->id ?? 0);
+                if ($subId <= 0) {
+                    $skipped++;
+                    continue;
+                }
+                try {
+                    $updates = ['updated_at' => $now];
+                    $newExpiryTs = null;
+                    if ($mode === 'set') {
+                        $newExpiryTs = $targetTimestamp;
+                        $updates['expires_at'] = date('Y-m-d H:i:s', $targetTimestamp);
+                        $updates['never_expires'] = 0;
+                        $updates['renewed_at'] = $now;
+                        $updates['auto_deleted_at'] = null;
+                    } elseif ($mode === 'extend') {
+                        if (intval($record->never_expires ?? 0) === 1) {
+                            $skipped++;
+                            continue;
+                        }
+                        $baseTs = $record->expires_at ? strtotime($record->expires_at) : time();
+                        if ($baseTs === false || $baseTs < time()) {
+                            $baseTs = time();
+                        }
+                        $computed = strtotime('+' . $extendDays . ' days', $baseTs);
+                        if ($computed === false) {
+                            $skipped++;
+                            continue;
+                        }
+                        $newExpiryTs = $computed;
+                        $updates['expires_at'] = date('Y-m-d H:i:s', $computed);
+                        $updates['never_expires'] = 0;
+                        $updates['renewed_at'] = $now;
+                        $updates['auto_deleted_at'] = null;
+                    } else {
+                        $updates['expires_at'] = null;
+                        $updates['never_expires'] = 1;
+                        $updates['auto_deleted_at'] = null;
+                    }
+
+                    Capsule::table('mod_cloudflare_subdomain')
+                        ->where('id', $subId)
+                        ->update($updates);
+
+                    if (function_exists('cloudflare_subdomain_log')) {
+                        cloudflare_subdomain_log('admin_batch_adjust_subdomain_expiry', [
+                            'mode' => $mode,
+                            'subdomain' => $record->subdomain ?? '',
+                            'previous_expires_at' => $record->expires_at ?? null,
+                            'previous_never_expires' => intval($record->never_expires ?? 0),
+                            'new_expires_at' => $updates['expires_at'] ?? null,
+                            'extend_days' => $mode === 'extend' ? $extendDays : null,
+                        ], intval($record->userid ?? 0), $subId);
+                    }
+                    $updated++;
+                } catch (\Throwable $rowEx) {
+                    $skipped++;
+                }
+            }
+
+            if ($updated === 0) {
+                self::flash('未能更新任何子域名，请确认所选记录是否满足条件。', 'warning');
+            } else {
+                $message = '已批量更新 ' . $updated . ' 个子域名的到期设置';
+                if ($skipped > 0) {
+                    $message .= '（另有 ' . $skipped . ' 个子域名被跳过）';
+                }
+                self::flashSuccess($message);
+            }
+        } catch (Exception $e) {
+            self::flashError('批量调整失败：' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+        }
+
+        self::redirect(self::HASH_SUBDOMAINS);
+    }
+
+    private static function handleSaveRenewalNoticeSettings(): void
+    {
+        $enabled = isset($_POST['renewal_notice_enabled']) && $_POST['renewal_notice_enabled'] === '1';
+        $template = trim((string)($_POST['renewal_notice_template'] ?? ''));
+        $day1 = intval($_POST['renewal_notice_days_primary'] ?? 0);
+        $day2 = intval($_POST['renewal_notice_days_secondary'] ?? 0);
+
+        if ($enabled && $template === '') {
+            self::flashError('请先填写邮件模板名称。');
+            self::redirect(self::HASH_RUNTIME);
+        }
+
+        try {
+            CfRenewalNoticeService::ensureTable();
+            self::persistModuleSettings([
+                'renewal_notice_enabled' => $enabled ? '1' : '0',
+                'renewal_notice_template' => $template,
+                'renewal_notice_days_primary' => (string)max(0, $day1),
+                'renewal_notice_days_secondary' => (string)max(0, $day2),
+            ]);
+            if (function_exists('cloudflare_subdomain_log')) {
+                cloudflare_subdomain_log('admin_save_renewal_notice', [
+                    'enabled' => $enabled ? 1 : 0,
+                    'template' => $template,
+                    'days_primary' => max(0, $day1),
+                    'days_secondary' => max(0, $day2),
+                ]);
+            }
+            self::flashSuccess('到期提醒设置已保存');
+        } catch (Exception $e) {
+            self::flashError('保存失败：' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+        }
+
+        self::redirect(self::HASH_RUNTIME);
+    }
+
+    private static function handleTestRenewalNotice(): void
+    {
+        $settings = self::moduleSettings();
+        $template = trim((string)($settings['renewal_notice_template'] ?? ''));
+        $daysList = CfRenewalNoticeService::parseConfiguredDays($settings);
+        $overrideDays = intval($_POST['test_notice_days'] ?? 0);
+        $overrideEmail = trim((string)($_POST['test_override_email'] ?? ''));
+        $subdomainId = intval($_POST['test_subdomain_id'] ?? 0);
+        $subdomainLabel = trim((string)($_POST['test_subdomain'] ?? ''));
+
+        if ($template === '') {
+            self::flashError('请先在上方保存邮件模板名称。');
+            self::redirect(self::HASH_RUNTIME);
+        }
+
+        if ($overrideDays > 0) {
+            $days = $overrideDays;
+        } elseif (!empty($daysList)) {
+            $days = $daysList[0];
+        } else {
+            self::flashError('请先在上方配置至少一个提醒天数。');
+            self::redirect(self::HASH_RUNTIME);
+        }
+
+        if ($subdomainId <= 0 && $subdomainLabel === '') {
+            self::flashError('请填写目标子域名或 ID。');
+            self::redirect(self::HASH_RUNTIME);
+        }
+
+        try {
+            CfRenewalNoticeService::ensureTable();
+            $query = Capsule::table('mod_cloudflare_subdomain');
+            if ($subdomainId > 0) {
+                $query->where('id', $subdomainId);
+            } else {
+                $query->where('subdomain', $subdomainLabel);
+            }
+            $record = $query->first();
+            if (!$record) {
+                throw new Exception('未找到对应的子域名记录');
+            }
+            $result = CfRenewalNoticeService::sendReminderEmail($record, $template, $days, $overrideEmail !== '' ? $overrideEmail : null);
+            if (!$result['success']) {
+                throw new Exception($result['message'] ?? '发送失败');
+            }
+            self::flashSuccess('测试提醒邮件已发送（提前 ' . $days . ' 天）。');
+        } catch (Exception $e) {
+            self::flashError('测试发送失败：' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+        }
+
+        self::redirect(self::HASH_RUNTIME);
+    }
+
     private static function handleScanOrphanRecords(): void
     {
         $rootdomain = strtolower(trim((string)($_POST['orphan_rootdomain'] ?? '')));
         $limit = intval($_POST['orphan_subdomain_limit'] ?? 100);
         if ($limit < 10) { $limit = 10; }
-        if ($limit > 500) { $limit = 500; }
+        if ($limit > 5000) { $limit = 5000; }
         $mode = $_POST['orphan_mode'] ?? 'dry';
         $cursorMode = strtolower(trim((string)($_POST['orphan_cursor_mode'] ?? 'resume')));
         if (!in_array($cursorMode, ['resume', 'reset'], true)) {
@@ -2807,7 +3032,7 @@ class CfAdminActionService
         $rootdomain = strtolower(trim((string)($params['rootdomain'] ?? '')));
         $limit = intval($params['limit'] ?? 100);
         if ($limit < 10) { $limit = 10; }
-        if ($limit > 500) { $limit = 500; }
+        if ($limit > 5000) { $limit = 5000; }
         $mode = $params['mode'] ?? 'dry';
         $cursorMode = strtolower(trim((string)($params['cursor_mode'] ?? 'resume')));
         if (!in_array($cursorMode, ['resume', 'reset'], true)) {
