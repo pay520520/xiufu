@@ -93,6 +93,8 @@ class CfAdminActionService
         'admin_set_user_quota' => [self::class, 'handleAdminSetUserQuota'],
         'update_user_quota' => [self::class, 'handleUpdateUserQuota'],
         'admin_adjust_expiry' => [self::class, 'handleAdminAdjustExpiry'],
+        'save_renewal_notice_settings' => [self::class, 'handleSaveRenewalNoticeSettings'],
+        'admin_test_renewal_notice' => [self::class, 'handleTestRenewalNotice'],
         'reset_module' => [self::class, 'handleResetModule'],
         'batch_delete' => [self::class, 'handleBatchDelete'],
         'batch_adjust_expiry' => [self::class, 'handleBatchAdjustExpiry'],
@@ -2894,6 +2896,95 @@ class CfAdminActionService
         }
 
         self::redirect(self::HASH_SUBDOMAINS);
+    }
+
+    private static function handleSaveRenewalNoticeSettings(): void
+    {
+        $enabled = isset($_POST['renewal_notice_enabled']) && $_POST['renewal_notice_enabled'] === '1';
+        $template = trim((string)($_POST['renewal_notice_template'] ?? ''));
+        $day1 = intval($_POST['renewal_notice_days_primary'] ?? 0);
+        $day2 = intval($_POST['renewal_notice_days_secondary'] ?? 0);
+
+        if ($enabled && $template === '') {
+            self::flashError('请先填写邮件模板名称。');
+            self::redirect(self::HASH_RUNTIME);
+        }
+
+        try {
+            CfRenewalNoticeService::ensureTable();
+            self::persistModuleSettings([
+                'renewal_notice_enabled' => $enabled ? '1' : '0',
+                'renewal_notice_template' => $template,
+                'renewal_notice_days_primary' => (string)max(0, $day1),
+                'renewal_notice_days_secondary' => (string)max(0, $day2),
+            ]);
+            if (function_exists('cloudflare_subdomain_log')) {
+                cloudflare_subdomain_log('admin_save_renewal_notice', [
+                    'enabled' => $enabled ? 1 : 0,
+                    'template' => $template,
+                    'days_primary' => max(0, $day1),
+                    'days_secondary' => max(0, $day2),
+                ]);
+            }
+            self::flashSuccess('到期提醒设置已保存');
+        } catch (Exception $e) {
+            self::flashError('保存失败：' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+        }
+
+        self::redirect(self::HASH_RUNTIME);
+    }
+
+    private static function handleTestRenewalNotice(): void
+    {
+        $settings = self::moduleSettings();
+        $template = trim((string)($settings['renewal_notice_template'] ?? ''));
+        $daysList = CfRenewalNoticeService::parseConfiguredDays($settings);
+        $overrideDays = intval($_POST['test_notice_days'] ?? 0);
+        $overrideEmail = trim((string)($_POST['test_override_email'] ?? ''));
+        $subdomainId = intval($_POST['test_subdomain_id'] ?? 0);
+        $subdomainLabel = trim((string)($_POST['test_subdomain'] ?? ''));
+
+        if ($template === '') {
+            self::flashError('请先在上方保存邮件模板名称。');
+            self::redirect(self::HASH_RUNTIME);
+        }
+
+        if ($overrideDays > 0) {
+            $days = $overrideDays;
+        } elseif (!empty($daysList)) {
+            $days = $daysList[0];
+        } else {
+            self::flashError('请先在上方配置至少一个提醒天数。');
+            self::redirect(self::HASH_RUNTIME);
+        }
+
+        if ($subdomainId <= 0 && $subdomainLabel === '') {
+            self::flashError('请填写目标子域名或 ID。');
+            self::redirect(self::HASH_RUNTIME);
+        }
+
+        try {
+            CfRenewalNoticeService::ensureTable();
+            $query = Capsule::table('mod_cloudflare_subdomain');
+            if ($subdomainId > 0) {
+                $query->where('id', $subdomainId);
+            } else {
+                $query->where('subdomain', $subdomainLabel);
+            }
+            $record = $query->first();
+            if (!$record) {
+                throw new Exception('未找到对应的子域名记录');
+            }
+            $result = CfRenewalNoticeService::sendReminderEmail($record, $template, $days, $overrideEmail !== '' ? $overrideEmail : null);
+            if (!$result['success']) {
+                throw new Exception($result['message'] ?? '发送失败');
+            }
+            self::flashSuccess('测试提醒邮件已发送（提前 ' . $days . ' 天）。');
+        } catch (Exception $e) {
+            self::flashError('测试发送失败：' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+        }
+
+        self::redirect(self::HASH_RUNTIME);
     }
 
     private static function handleScanOrphanRecords(): void

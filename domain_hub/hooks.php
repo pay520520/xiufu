@@ -328,6 +328,41 @@ add_hook('AfterCronJob', 1, function($vars) {
                     'updated_at' => $now
                 ]);
             }
+
+            $noticeEnabled = CfRenewalNoticeService::isEnabled($settings);
+            $noticeTemplate = trim((string)($settings['renewal_notice_template'] ?? ''));
+            $noticeDays = CfRenewalNoticeService::parseConfiguredDays($settings);
+            if ($noticeEnabled && $noticeTemplate !== '' && !empty($noticeDays)) {
+                $noticeIntervalHours = 24;
+                $lastNoticeJob = Capsule::table('mod_cloudflare_jobs')
+                    ->where('type', 'send_expiry_notices')
+                    ->orderBy('id', 'desc')
+                    ->first();
+                $shouldNotice = false;
+                if (!$lastNoticeJob) {
+                    $shouldNotice = true;
+                } elseif (in_array($lastNoticeJob->status, ['failed', 'done', 'cancelled'], true)) {
+                    $lastTime = $lastNoticeJob->updated_at ?? $lastNoticeJob->created_at;
+                    if (!$lastTime || strtotime($lastTime) <= time() - $noticeIntervalHours * 3600) {
+                        $shouldNotice = true;
+                    }
+                }
+                if ($shouldNotice) {
+                    Capsule::table('mod_cloudflare_jobs')->insert([
+                        'type' => 'send_expiry_notices',
+                        'payload_json' => json_encode([
+                            'days' => $noticeDays,
+                            'auto' => true,
+                        ], JSON_UNESCAPED_UNICODE),
+                        'priority' => 18,
+                        'status' => 'pending',
+                        'attempts' => 0,
+                        'next_run_at' => null,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                }
+            }
         }
     } catch (\Throwable $e) {
         cfmod_report_exception('after_cron_job', $e);

@@ -315,6 +315,9 @@ function run_cf_queue_once(int $maxJobs = 3): void {
                 case 'cleanup_orphan_dns':
                     $stats = cfmod_job_cleanup_orphan_dns($job, $payload) ?: [];
                     break;
+                case 'send_expiry_notices':
+                    $stats = cfmod_job_send_expiry_notices($job, $payload) ?: [];
+                    break;
                 case 'replace_root_domain':
                     $stats = cfmod_job_replace_root($job, $payload) ?: [];
                     break;
@@ -2376,6 +2379,89 @@ function cfmod_job_cleanup_risk_events($job, array $payload = []): array {
         $stats['warnings'][] = 'cleanup_failed:' . substr($errMsg, 0, 120);
         $stats['message'] = 'cleanup encountered errors: ' . substr($errMsg, 0, 120);
         cfmod_report_exception('cleanup_risk_events', $e);
+    }
+
+    return $stats;
+}
+
+function cfmod_job_send_expiry_notices($job, array $payload = []): array {
+    $stats = [
+        'processed' => 0,
+        'sent' => 0,
+        'warnings' => [],
+        'days' => [],
+    ];
+
+    try {
+        $settings = cfmod_get_settings();
+        if (!CfRenewalNoticeService::isEnabled($settings)) {
+            $stats['message'] = 'renewal_notice_disabled';
+            return $stats;
+        }
+        $template = trim((string)($settings['renewal_notice_template'] ?? ''));
+        if ($template === '') {
+            $stats['warnings'][] = 'template_missing';
+            $stats['message'] = 'template_missing';
+            return $stats;
+        }
+        $daysList = CfRenewalNoticeService::parseConfiguredDays($settings, $payload['days'] ?? []);
+        if (empty($daysList)) {
+            $stats['message'] = 'no_days_configured';
+            return $stats;
+        }
+        CfRenewalNoticeService::ensureTable();
+        $batchLimit = intval($payload['batch_size'] ?? 200);
+        $batchLimit = max(10, min(1000, $batchLimit));
+        $stats['days'] = $daysList;
+        foreach ($daysList as $days) {
+            $reminderKey = CfRenewalNoticeService::reminderKey($days);
+            $targetTs = strtotime('+' . $days . ' days');
+            $start = date('Y-m-d 00:00:00', $targetTs);
+            $end = date('Y-m-d 23:59:59', $targetTs);
+            $records = Capsule::table('mod_cloudflare_subdomain as s')
+                ->select('s.*')
+                ->whereNotNull('s.expires_at')
+                ->where('s.never_expires', 0)
+                ->whereNotIn('s.status', ['deleted', 'Deleted'])
+                ->whereBetween('s.expires_at', [$start, $end])
+                ->whereNotExists(function($sub) use ($reminderKey) {
+                    $sub->select(Capsule::raw('1'))
+                        ->from(CfRenewalNoticeService::TABLE . ' as n')
+                        ->whereColumn('n.subdomain_id', 's.id')
+                        ->where('n.reminder_key', $reminderKey)
+                        ->whereColumn('n.expires_at_snapshot', 's.expires_at');
+                })
+                ->orderBy('s.expires_at', 'asc')
+                ->limit($batchLimit)
+                ->get();
+
+            foreach ($records as $subdomain) {
+                $stats['processed']++;
+                $result = CfRenewalNoticeService::sendReminderEmail($subdomain, $template, $days);
+                if ($result['success']) {
+                    $stats['sent']++;
+                    CfRenewalNoticeService::markReminderSent(
+                        intval($subdomain->id ?? 0),
+                        $reminderKey,
+                        $subdomain->expires_at ?? null
+                    );
+                    if (function_exists('cloudflare_subdomain_log')) {
+                        cloudflare_subdomain_log('auto_send_expiry_notice', [
+                            'subdomain' => $subdomain->subdomain ?? '',
+                            'reminder_key' => $reminderKey,
+                            'days_left' => $days,
+                        ], intval($subdomain->userid ?? 0), intval($subdomain->id ?? 0));
+                    }
+                } else {
+                    $stats['warnings'][] = $result['message'] ?? 'send_failed';
+                }
+            }
+        }
+        $stats['message'] = 'sent ' . $stats['sent'] . ' notices';
+    } catch (\Throwable $e) {
+        $stats['warnings'][] = $e->getMessage();
+        $stats['message'] = 'failure:' . substr($e->getMessage(), 0, 60);
+        cfmod_report_exception('send_expiry_notices', $e);
     }
 
     return $stats;
