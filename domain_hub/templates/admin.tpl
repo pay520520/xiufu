@@ -297,6 +297,14 @@ $resolvedUserId = null;
 if ($user_filter !== '' && ctype_digit($user_filter)) {
     $resolvedUserId = (int) $user_filter;
 }
+$expiryDaysInputRaw = trim((string)($_GET['expiry_days'] ?? ''));
+$expiryDaysFilter = null;
+if ($expiryDaysInputRaw !== '' && ctype_digit($expiryDaysInputRaw)) {
+    $expiryDaysFilter = max(1, min(3650, intval($expiryDaysInputRaw)));
+    $expiryDaysInput = (string) $expiryDaysFilter;
+} else {
+    $expiryDaysInput = '';
+}
 $showAllSubdomains = ($_GET['view_all_subdomains'] ?? '') === '1';
 
 $query = Capsule::table('mod_cloudflare_subdomain as s')
@@ -325,6 +333,16 @@ if ($resolvedUserId !== null) {
           ->orWhere('c.firstname', 'like', '%' . $user_filter . '%')
           ->orWhere('c.lastname', 'like', '%' . $user_filter . '%');
     });
+}
+
+if ($expiryDaysFilter !== null) {
+    $deadline = date('Y-m-d H:i:s', time() + ($expiryDaysFilter * 86400));
+    $query->whereNotNull('s.expires_at')
+        ->where('s.expires_at', '<=', $deadline)
+        ->where(function($q) {
+            $q->whereNull('s.never_expires')
+              ->orWhere('s.never_expires', '=', 0);
+        });
 }
 
 $subdomains = [];
@@ -609,6 +627,12 @@ $riskLogEvents = $riskLogMeta['entries'] ?? [];
                         </div>
 
                         <div class="col-md-2">
+                            <label class="form-label">到期不足（天）</label>
+                            <input type="number" class="form-control" name="expiry_days" min="1" max="3650" value="<?php echo htmlspecialchars($expiryDaysInput); ?>" placeholder="如 365">
+                            <div class="form-text text-muted">仅显示将在指定天数内到期的非永久域名</div>
+                        </div>
+
+                        <div class="col-md-2">
                             <label class="form-label">&nbsp;</label>
                             <div>
                                 <button type="submit" class="btn btn-primary">搜索</button>
@@ -624,10 +648,45 @@ $riskLogEvents = $riskLogMeta['entries'] ?? [];
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h5 class="card-title mb-0">子域名列表</h5>
-                        <div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-primary" onclick="openBatchExpiryPanel()">
+                                <i class="fas fa-clock me-1"></i> 批量调整到期
+                            </button>
                             <button type="button" class="btn btn-danger" onclick="confirmBatchDelete()">批量删除</button>
                             <a href="?module=domain_hub&action=export" class="btn btn-success">导出CSV</a>
                         </div>
+                    </div>
+
+                    <div id="batchExpiryPanel" class="alert alert-info" style="display:none;">
+                        <form method="post" id="batchExpiryForm" class="row g-3 align-items-end" onsubmit="return validateBatchExpiryForm();">
+                            <input type="hidden" name="action" value="batch_adjust_expiry">
+                            <div id="batchExpirySelectedHolder"></div>
+                            <div class="col-12">
+                                <strong>已选择 <span id="batchExpiryCount">0</span> 个子域名。</strong> 请设置批量调整策略。
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">操作类型</label>
+                                <select class="form-select" name="batch_expiry_mode" id="batchExpiryMode">
+                                    <option value="set">设置具体日期</option>
+                                    <option value="extend">延长天数</option>
+                                    <option value="never">设置为永久</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 batch-expiry-field" data-mode="set">
+                                <label class="form-label">新的到期时间</label>
+                                <input type="datetime-local" class="form-control" name="expires_at_input" id="batchExpiryDateInput">
+                            </div>
+                            <div class="col-md-3 batch-expiry-field" data-mode="extend" style="display:none;">
+                                <label class="form-label">延长天数</label>
+                                <input type="number" class="form-control" name="extend_days" id="batchExpiryExtendInput" min="1" max="3650" placeholder="例如 90">
+                            </div>
+                            <div class="col-md-12">
+                                <button type="submit" class="btn btn-primary me-2">执行批量调整</button>
+                                <button type="button" class="btn btn-outline-secondary me-2" onclick="refreshBatchExpirySelection()">重新获取选中项</button>
+                                <button type="button" class="btn btn-link text-muted" onclick="closeBatchExpiryPanel()">取消</button>
+                            </div>
+                        </form>
+                        <div class="small text-muted mt-2">若在打开面板后修改了勾选，请点击“重新获取选中项”以同步所选列表。</div>
                     </div>
 
                     <?php
@@ -1105,6 +1164,9 @@ $cfAdminFooterConfig = [
     'lang' => [
         'batchDeleteEmpty' => $lang['js_batch_delete_empty'] ?? '请选择要删除的记录',
         'batchDeleteConfirm' => $lang['js_batch_delete_confirm'] ?? '确定要删除选中的 %d 条记录吗？此操作不可恢复！',
+        'batchExpirySelection' => $lang['js_batch_expiry_selection_missing'] ?? '请选择需要调整到期的子域名',
+        'batchExpiryDateRequired' => $lang['js_batch_expiry_date_required'] ?? '请先填写新的到期时间',
+        'batchExpiryExtendRequired' => $lang['js_batch_expiry_extend_required'] ?? '请填写延长天数（至少 1 天）',
         'numberRequired' => $lang['js_number_required'] ?? '请输入数字！',
         'numberInvalid' => $lang['js_number_invalid'] ?? '请输入有效的数字（只能包含0-9）！',
         'numberLeadingZero' => $lang['js_number_leading_zero'] ?? '数字不能以0开头！',

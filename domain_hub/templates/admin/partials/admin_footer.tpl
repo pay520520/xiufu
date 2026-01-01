@@ -67,6 +67,107 @@ $quotaEndpoint = $footerConfig['api']['quotaEndpoint'] ?? '?module=domain_hub&ac
     }
   };
 
+  function getBatchExpiryElements(){
+    return {
+      panel: document.getElementById('batchExpiryPanel'),
+      holder: document.getElementById('batchExpirySelectedHolder'),
+      count: document.getElementById('batchExpiryCount'),
+      mode: document.getElementById('batchExpiryMode'),
+      dateInput: document.getElementById('batchExpiryDateInput'),
+      extendInput: document.getElementById('batchExpiryExtendInput')
+    };
+  }
+
+  function populateBatchExpirySelection(){
+    var els = getBatchExpiryElements();
+    if (!els.holder || !els.count) { return false; }
+    els.holder.innerHTML = '';
+    var checkedBoxes = document.querySelectorAll('.record-checkbox:checked');
+    if (checkedBoxes.length === 0) {
+      return false;
+    }
+    checkedBoxes.forEach(function(box){
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'selected_ids[]';
+      input.value = box.value;
+      els.holder.appendChild(input);
+    });
+    els.count.textContent = checkedBoxes.length;
+    return true;
+  }
+
+  function updateBatchExpiryMode(){
+    var els = getBatchExpiryElements();
+    if (!els.mode) { return; }
+    var mode = els.mode.value;
+    document.querySelectorAll('.batch-expiry-field').forEach(function(node){
+      var targetMode = node.getAttribute('data-mode');
+      if (!targetMode || targetMode === mode) {
+        node.style.display = '';
+      } else {
+        node.style.display = 'none';
+      }
+    });
+  }
+
+  window.openBatchExpiryPanel = function(){
+    var els = getBatchExpiryElements();
+    if (!els.panel) { return; }
+    if (!populateBatchExpirySelection()) {
+      alert(lang.batchExpirySelection || lang.batchDeleteEmpty || '请选择需要调整到期的子域名');
+      els.panel.style.display = 'none';
+      return;
+    }
+    if (els.mode) {
+      els.mode.value = 'set';
+      updateBatchExpiryMode();
+    }
+    if (els.dateInput) { els.dateInput.value = ''; }
+    if (els.extendInput) { els.extendInput.value = ''; }
+    els.panel.style.display = 'block';
+    els.panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  window.refreshBatchExpirySelection = function(){
+    var els = getBatchExpiryElements();
+    if (!els.panel) { return; }
+    if (!populateBatchExpirySelection()) {
+      alert(lang.batchExpirySelection || lang.batchDeleteEmpty || '请选择需要调整到期的子域名');
+      els.panel.style.display = 'none';
+    }
+  };
+
+  window.closeBatchExpiryPanel = function(){
+    var els = getBatchExpiryElements();
+    if (els.panel) {
+      els.panel.style.display = 'none';
+    }
+  };
+
+  window.validateBatchExpiryForm = function(){
+    var els = getBatchExpiryElements();
+    if (!els.holder) { return false; }
+    if (!els.holder.querySelector('input[name="selected_ids[]"]')) {
+      alert(lang.batchExpirySelection || lang.batchDeleteEmpty || '请选择需要调整到期的子域名');
+      return false;
+    }
+    if (!els.mode) { return true; }
+    if (els.mode.value === 'set') {
+      if (!els.dateInput || !els.dateInput.value) {
+        alert(lang.batchExpiryDateRequired || '请先填写新的到期时间');
+        return false;
+      }
+    } else if (els.mode.value === 'extend') {
+      var extendVal = els.extendInput ? parseInt(els.extendInput.value, 10) : NaN;
+      if (!extendVal || extendVal <= 0) {
+        alert(lang.batchExpiryExtendRequired || '请填写延长天数（至少 1 天）');
+        return false;
+      }
+    }
+    return true;
+  };
+
   function initSelectAll(){
     var selectAll = document.getElementById('selectAll');
     if (!selectAll) { return; }
@@ -118,6 +219,11 @@ $quotaEndpoint = $footerConfig['api']['quotaEndpoint'] ?? '?module=domain_hub&ac
     initPurgeHelper();
     initAnnouncementModal();
     initModalPolyfill();
+    var batchMode = document.getElementById('batchExpiryMode');
+    if (batchMode) {
+      batchMode.addEventListener('change', updateBatchExpiryMode);
+      updateBatchExpiryMode();
+    }
     document.addEventListener('keydown', function(e){
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         var searchInput = document.getElementById('api_search');

@@ -95,8 +95,9 @@ class CfAdminActionService
         'admin_adjust_expiry' => [self::class, 'handleAdminAdjustExpiry'],
         'reset_module' => [self::class, 'handleResetModule'],
         'batch_delete' => [self::class, 'handleBatchDelete'],
+        'batch_adjust_expiry' => [self::class, 'handleBatchAdjustExpiry'],
         'scan_orphan_records' => [self::class, 'handleScanOrphanRecords'],
-        'migrate_invite_registration_existing_users' => [self::class, 'handleMigrateInviteRegistrationExistingUsers'],
+
     ];
 
     public static function supports(string $action): bool
@@ -2757,6 +2758,139 @@ class CfAdminActionService
             }
         } catch (Exception $e) {
             self::flashError('批量删除失败：' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+        }
+
+        self::redirect(self::HASH_SUBDOMAINS);
+    }
+
+    private static function handleBatchAdjustExpiry(): void
+    {
+        $selected = $_POST['selected_ids'] ?? [];
+        if (!is_array($selected) || count($selected) === 0) {
+            self::flash('请选择要调整的子域名', 'warning');
+            self::redirect(self::HASH_SUBDOMAINS);
+        }
+        $ids = [];
+        foreach ($selected as $rawId) {
+            $id = intval($rawId);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        $ids = array_values(array_unique($ids));
+        if (empty($ids)) {
+            self::flash('请选择要调整的子域名', 'warning');
+            self::redirect(self::HASH_SUBDOMAINS);
+        }
+        $mode = (string) ($_POST['batch_expiry_mode'] ?? 'set');
+        if (!in_array($mode, ['set', 'extend', 'never'], true)) {
+            $mode = 'set';
+        }
+        $targetTimestamp = null;
+        $extendDays = null;
+        if ($mode === 'set') {
+            $inputRaw = trim((string) ($_POST['expires_at_input'] ?? ''));
+            if ($inputRaw === '') {
+                self::flashError('请输入新的到期时间');
+                self::redirect(self::HASH_SUBDOMAINS);
+            }
+            $parsedTs = strtotime(str_replace('T', ' ', $inputRaw));
+            if ($parsedTs === false) {
+                self::flashError('无法解析到期时间，请确认格式');
+                self::redirect(self::HASH_SUBDOMAINS);
+            }
+            $targetTimestamp = $parsedTs;
+        } elseif ($mode === 'extend') {
+            $extendDays = intval($_POST['extend_days'] ?? 0);
+            if ($extendDays <= 0) {
+                self::flashError('请输入有效的延长天数（至少 1 天）');
+                self::redirect(self::HASH_SUBDOMAINS);
+            }
+        }
+
+        try {
+            $records = Capsule::table('mod_cloudflare_subdomain')
+                ->whereIn('id', $ids)
+                ->get();
+            $items = self::normalizeRecordList($records);
+            if (empty($items)) {
+                self::flash('未找到需要调整的子域名，请刷新页面后重试。', 'warning');
+                self::redirect(self::HASH_SUBDOMAINS);
+            }
+            $now = date('Y-m-d H:i:s');
+            $updated = 0;
+            $skipped = 0;
+            foreach ($items as $record) {
+                $subId = intval($record->id ?? 0);
+                if ($subId <= 0) {
+                    $skipped++;
+                    continue;
+                }
+                try {
+                    $updates = ['updated_at' => $now];
+                    $newExpiryTs = null;
+                    if ($mode === 'set') {
+                        $newExpiryTs = $targetTimestamp;
+                        $updates['expires_at'] = date('Y-m-d H:i:s', $targetTimestamp);
+                        $updates['never_expires'] = 0;
+                        $updates['renewed_at'] = $now;
+                        $updates['auto_deleted_at'] = null;
+                    } elseif ($mode === 'extend') {
+                        if (intval($record->never_expires ?? 0) === 1) {
+                            $skipped++;
+                            continue;
+                        }
+                        $baseTs = $record->expires_at ? strtotime($record->expires_at) : time();
+                        if ($baseTs === false || $baseTs < time()) {
+                            $baseTs = time();
+                        }
+                        $computed = strtotime('+' . $extendDays . ' days', $baseTs);
+                        if ($computed === false) {
+                            $skipped++;
+                            continue;
+                        }
+                        $newExpiryTs = $computed;
+                        $updates['expires_at'] = date('Y-m-d H:i:s', $computed);
+                        $updates['never_expires'] = 0;
+                        $updates['renewed_at'] = $now;
+                        $updates['auto_deleted_at'] = null;
+                    } else {
+                        $updates['expires_at'] = null;
+                        $updates['never_expires'] = 1;
+                        $updates['auto_deleted_at'] = null;
+                    }
+
+                    Capsule::table('mod_cloudflare_subdomain')
+                        ->where('id', $subId)
+                        ->update($updates);
+
+                    if (function_exists('cloudflare_subdomain_log')) {
+                        cloudflare_subdomain_log('admin_batch_adjust_subdomain_expiry', [
+                            'mode' => $mode,
+                            'subdomain' => $record->subdomain ?? '',
+                            'previous_expires_at' => $record->expires_at ?? null,
+                            'previous_never_expires' => intval($record->never_expires ?? 0),
+                            'new_expires_at' => $updates['expires_at'] ?? null,
+                            'extend_days' => $mode === 'extend' ? $extendDays : null,
+                        ], intval($record->userid ?? 0), $subId);
+                    }
+                    $updated++;
+                } catch (\Throwable $rowEx) {
+                    $skipped++;
+                }
+            }
+
+            if ($updated === 0) {
+                self::flash('未能更新任何子域名，请确认所选记录是否满足条件。', 'warning');
+            } else {
+                $message = '已批量更新 ' . $updated . ' 个子域名的到期设置';
+                if ($skipped > 0) {
+                    $message .= '（另有 ' . $skipped . ' 个子域名被跳过）';
+                }
+                self::flashSuccess($message);
+            }
+        } catch (Exception $e) {
+            self::flashError('批量调整失败：' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
         }
 
         self::redirect(self::HASH_SUBDOMAINS);

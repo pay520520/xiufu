@@ -19,8 +19,11 @@ return [
     'noscript_warning' => '为了防止CSRF攻击，请启用浏览器的 JavaScript 后再执行敏感操作。',
     'js_batch_delete_empty' => '请选择要删除的记录',
     'js_batch_delete_confirm' => '确定要删除选中的 %d 条记录吗？此操作不可恢复！',
+    'js_batch_expiry_selection_missing' => '请选择需要调整到期的子域名',
+    'js_batch_expiry_date_required' => '请先填写新的到期时间',
+    'js_batch_expiry_extend_required' => '请填写延长天数（至少 1 天）',
     'js_number_required' => '请输入数字！',
-    'js_number_invalid' => '请输入有效的数字（只能包含0-9）！',
+
     'js_number_leading_zero' => '数字不能以0开头！',
     'js_number_min' => '数值不能小于 %d！',
     'js_number_max' => '数值不能超过 %d！',
