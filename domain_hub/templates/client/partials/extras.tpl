@@ -5,9 +5,10 @@ $extrasTexts = [
     'tipsTitle' => cfclient_lang('cfclient.extras.tips.title', $isClientLanguageChinese ? '域名知识小贴士' : 'Domain Tips', [], true),
     'domainTitle' => cfclient_lang('cfclient.extras.tips.domain.title', $isClientLanguageChinese ? '📚 域名概念' : '📚 Domain Basics', [], true),
     'dnsTitle' => cfclient_lang('cfclient.extras.tips.dns.title', $isClientLanguageChinese ? '🔧 DNS记录说明' : '🔧 DNS Records', [], true),
-    'warning' => cfclient_lang('cfclient.extras.warning', $isClientLanguageChinese ? '重要提示：DNS记录修改可能需要几分钟时间生效，请耐心等待。' : 'Important: DNS changes can take a few minutes to propagate. Please wait patiently.', [], true),
+    'warning' => cfclient_lang('cfclient.extras.warning', $isClientLanguageChinese ? '重要提示：DNS记录添加、修改或删除可能需要几分钟时间生效，请耐心等待。' : 'Important: Adding, editing, or deleting DNS records can take a few minutes to propagate. Please wait patiently.', [], true),
+    'warningExtra' => cfclient_lang('cfclient.extras.warning.extra', $isClientLanguageChinese ? '重要提示：若您遇到解析记录无法新增或删除的情况，请提交工单并注明具体域名与错误详情获取协助。您也可以访问 t.cc.cd 加入官方 TG 社区群组，实时掌握最新动态。' : 'Important: If you cannot add or remove DNS records, open a ticket with the domain and error details for help. You can also visit t.cc.cd to join our official TG community for real-time updates.', [], true),
     'supportTitle' => cfclient_lang('cfclient.extras.support.title', $isClientLanguageChinese ? '需要帮助？' : 'Need help?', [], true),
-    'supportBody' => cfclient_lang('cfclient.extras.support.body', $isClientLanguageChinese ? '如果您在使用过程中遇到问题，或者需要技术支持，请点击下方按钮提交工单' : 'If you run into issues or need support, click the buttons below to open a ticket.', [], true),
+
     'supportTicket' => cfclient_lang('cfclient.extras.support.ticket', $isClientLanguageChinese ? '提交工单' : 'Open Ticket', [], true),
     'supportAppeal' => cfclient_lang('cfclient.extras.support.appeal', $isClientLanguageChinese ? '提交封禁申诉工单' : 'Submit Ban Appeal', [], true),
     'supportKb' => cfclient_lang('cfclient.extras.support.kb', $isClientLanguageChinese ? '知识库' : 'Knowledgebase', [], true),
@@ -22,11 +23,13 @@ $extrasList = [
     'domain' => [
         cfclient_lang('cfclient.extras.tips.domain.transfer', '域名转赠：域名转赠成功后无法撤回操作，请在分享前确认。', [], true),
         cfclient_lang('cfclient.extras.tips.domain.content', '禁止内容：域名禁止用于任何违法违规行为,一经发现立即封禁!', [], true),
+        cfclient_lang('cfclient.extras.tips.domain.renewal', '域名续期：系统将在域名到期前 180 天之内开启免费续期通道。您可通过管理控制面板或 API 接口实现一键续期。', [], true),
         cfclient_lang($deleteTipKey, $deleteTipDefault, [], true),
     ],
     'dns' => [
         cfclient_lang('cfclient.extras.tips.dns.root', '@ 记录：表示域名本身（如 blog.example.com）', [], true),
         cfclient_lang('cfclient.extras.tips.dns.propagation', 'DNS解析：DNS记录修改可能需要几分钟时间生效，请耐心等待。', [], true),
+        cfclient_lang('cfclient.extras.tips.dns.line', '线路限制：部分域名不支持按运营商或地域返回不同的 DNS 记录。', [], true),
         cfclient_lang('cfclient.extras.tips.dns.error', '解析错误：如遇解析错误,无法解析的情况可以提交工单联系客服获取帮助！', [], true),
     ],
 ];
@@ -71,6 +74,10 @@ $banAppealMessage = $banAppealMessageBase . $banAppealReason . '\n' . $banAppeal
                 <div class="alert alert-warning mt-3 mb-0" id="dnsTimeoutWarning">
                     <i class="fas fa-exclamation-triangle"></i>
                     <strong><?php echo $extrasTexts['warning']; ?></strong>
+                </div>
+                <div class="alert alert-info mt-2 mb-0" id="dnsSupportWarning">
+                    <i class="fas fa-life-ring"></i>
+                    <strong><?php echo $extrasTexts['warningExtra']; ?></strong>
                 </div>
             </div>
         </div>
