@@ -513,8 +513,39 @@ proxiedCheckbox.disabled = false;
         }
         
         function isValidIPv6(ip) {
-            const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::1$|^::$/;
-            return ipv6Regex.test(ip);
+            if (typeof ip !== 'string') {
+                return false;
+            }
+            const value = ip.trim();
+            if (value === '') {
+                return false;
+            }
+            if (value === '::') {
+                return true;
+            }
+            const parts = value.split('::');
+            if (parts.length > 2) {
+                return false;
+            }
+            const left = parts[0] ? parts[0].split(':').filter(Boolean) : [];
+            const right = parts.length === 2 && parts[1] ? parts[1].split(':').filter(Boolean) : [];
+            const blocks = left.concat(right);
+            let ipv4Tail = null;
+            if (blocks.length > 0 && blocks[blocks.length - 1].includes('.')) {
+                ipv4Tail = blocks.pop();
+                if (!isValidIPv4(ipv4Tail)) {
+                    return false;
+                }
+            }
+            const blockRegex = /^[0-9a-fA-F]{1,4}$/;
+            if (!blocks.every(block => blockRegex.test(block))) {
+                return false;
+            }
+            const totalSegments = blocks.length + (ipv4Tail ? 2 : 0);
+            if (parts.length === 2) {
+                return totalSegments < 8;
+            }
+            return totalSegments === 8;
         }
         
         function isValidDomain(domain) {

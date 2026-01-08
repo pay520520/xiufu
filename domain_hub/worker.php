@@ -21,6 +21,11 @@ use Illuminate\Support\Collection;
 
 require_once __DIR__ . '/lib/autoload.php';
 CfModuleSettings::bootstrap();
+
+if (!function_exists('cfmod_setting_enabled')) {
+    require_once __DIR__ . '/domain_hub.php';
+}
+
 require_once __DIR__ . '/lib/CloudflareAPI.php';
 require_once __DIR__ . '/lib/ExternalRiskAPI.php';
 require_once __DIR__ . '/lib/TtlHelper.php';
