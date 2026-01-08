@@ -2181,6 +2181,82 @@ class CfAdminActionService
         self::redirect(self::HASH_INVITE);
     }
 
+    private static function handleUpdateUserInviteLimit(): void
+    {
+        try {
+            $userId = intval($_POST['user_id'] ?? 0);
+            $email = trim((string) ($_POST['user_email'] ?? ''));
+            
+            if ($userId <= 0 && $email !== '') {
+                $userLookup = Capsule::table('tblclients')->where('email', $email)->first();
+                if ($userLookup) {
+                    $userId = intval($userLookup->id);
+                }
+            }
+            
+            if ($userId <= 0) {
+                throw new Exception('用户ID无效或邮箱不存在');
+            }
+            
+            $user = Capsule::table('tblclients')->where('id', $userId)->first();
+            if (!$user) {
+                throw new Exception('用户不存在');
+            }
+            
+            $newInviteLimit = null;
+            if (isset($_POST['new_invite_limit']) && $_POST['new_invite_limit'] !== '') {
+                $newInviteLimit = max(0, min(99999999999, intval($_POST['new_invite_limit'])));
+            }
+            
+            if ($newInviteLimit === null) {
+                throw new Exception('请填写新的邀请上限值');
+            }
+            
+            $settings = self::moduleSettings();
+            $quotaRow = Capsule::table('mod_cloudflare_subdomain_quotas')->where('userid', $userId)->first();
+            
+            if ($quotaRow) {
+                Capsule::table('mod_cloudflare_subdomain_quotas')
+                    ->where('userid', $userId)
+                    ->update([
+                        'invite_bonus_limit' => $newInviteLimit,
+                        'updated_at' => date('Y-m-d H:i:s'),
+                    ]);
+            } else {
+                $usedCount = Capsule::table('mod_cloudflare_subdomain')->where('userid', $userId)->count();
+                $maxCount = max(0, intval($settings['max_subdomain_per_user'] ?? 0));
+                
+                Capsule::table('mod_cloudflare_subdomain_quotas')->insert([
+                    'userid' => $userId,
+                    'used_count' => $usedCount,
+                    'max_count' => $maxCount,
+                    'invite_bonus_count' => 0,
+                    'invite_bonus_limit' => $newInviteLimit,
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+            }
+            
+            if (function_exists('cloudflare_subdomain_log')) {
+                cloudflare_subdomain_log('admin_update_user_invite_limit', [
+                    'userid' => $userId,
+                    'new_invite_limit' => $newInviteLimit,
+                ]);
+            }
+            
+            $name = trim((string) ($user->firstname ?? '') . ' ' . (string) ($user->lastname ?? ''));
+            if ($name === '') {
+                $name = $user->email ?? ('ID:' . $userId);
+            }
+            
+            self::flashSuccess('✅ 用户 <strong>' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</strong> 的邀请上限已更新为 ' . $newInviteLimit);
+        } catch (Exception $e) {
+            self::flashError('❌ 更新邀请上限失败：' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+        }
+
+        self::redirect(self::HASH_QUOTAS);
+    }
+
     private static function handleAddPrivilegedUser(): void
     {
         try {
