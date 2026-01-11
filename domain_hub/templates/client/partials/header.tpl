@@ -24,21 +24,77 @@ $clientAnnounceTitleSafe = (isset($clientAnnounceTitle) && $clientAnnounceTitle 
     <div class="header-section text-center position-relative">
         <div class="position-absolute top-0 end-0 d-flex gap-2 align-items-start">
             <?php if (!empty($languageOptions)): ?>
-                <div class="header-language-switcher dropdown">
-                    <button class="btn btn-light btn-sm dropdown-toggle" type="button" id="cfmodLanguageDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="fas fa-language me-1"></i> <?php echo $activeLanguageLabel; ?>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="cfmodLanguageDropdown">
-                        <li class="dropdown-header text-muted small"><?php echo $languageSwitchLabel; ?></li>
-                        <?php foreach ($languageOptions as $langOption): ?>
-                            <li>
-                                <a class="dropdown-item <?php echo !empty($langOption['active']) ? 'active fw-bold' : ''; ?>" href="<?php echo htmlspecialchars($langOption['url'], ENT_QUOTES); ?>">
+                <div class="header-language-switcher">
+                    <div class="btn-group">
+                        <button class="btn btn-light btn-sm dropdown-toggle cfmod-lang-toggle" 
+                                type="button" 
+                                id="cfmodLanguageDropdown">
+                            <i class="fas fa-language me-1"></i> <span class="cfmod-lang-current"><?php echo $activeLanguageLabel; ?></span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end cfmod-lang-menu" style="display:none;">
+                            <h6 class="dropdown-header text-muted small"><?php echo $languageSwitchLabel; ?></h6>
+                            <?php foreach ($languageOptions as $langOption): ?>
+                                <a class="dropdown-item <?php echo !empty($langOption['active']) ? 'active fw-bold' : ''; ?>" 
+                                   href="<?php echo htmlspecialchars($langOption['url'], ENT_QUOTES); ?>">
                                     <?php echo htmlspecialchars($langOption['label'], ENT_QUOTES); ?>
                                 </a>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
                 </div>
+                <style>
+                .cfmod-lang-menu {
+                    position: absolute;
+                    top: 100%;
+                    right: 0;
+                    z-index: 1050;
+                    min-width: 10rem;
+                    padding: 0.5rem 0;
+                    margin: 0.125rem 0 0;
+                    font-size: 1rem;
+                    color: #212529;
+                    text-align: left;
+                    list-style: none;
+                    background-color: #fff;
+                    background-clip: padding-box;
+                    border: 1px solid rgba(0,0,0,.15);
+                    border-radius: 0.25rem;
+                    box-shadow: 0 0.5rem 1rem rgba(0,0,0,.175);
+                }
+                .cfmod-lang-menu.show {
+                    display: block !important;
+                }
+                .header-language-switcher {
+                    position: relative;
+                }
+                </style>
+                <script>
+                (function() {
+                    var toggleBtn = document.getElementById('cfmodLanguageDropdown');
+                    var menu = document.querySelector('.cfmod-lang-menu');
+                    
+                    if (toggleBtn && menu) {
+                        toggleBtn.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            menu.classList.toggle('show');
+                        });
+                        
+                        document.addEventListener('click', function(e) {
+                            if (!toggleBtn.contains(e.target) && !menu.contains(e.target)) {
+                                menu.classList.remove('show');
+                            }
+                        });
+                        
+                        var menuItems = menu.querySelectorAll('.dropdown-item');
+                        menuItems.forEach(function(item) {
+                            item.addEventListener('click', function() {
+                                menu.classList.remove('show');
+                            });
+                        });
+                    }
+                })();
+                </script>
             <?php endif; ?>
         </div>
         <h1><i class="fas fa-globe"></i> <?php echo $headerTitle; ?></h1>
