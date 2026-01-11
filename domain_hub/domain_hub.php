@@ -1529,6 +1529,19 @@ function domain_hub_config() {
             "Default" => "0",
             "Description" => "每个用户最多可邀请多少人（0=不限制）",
         ],
+        "upgrade_permanent_enabled" => [
+            "FriendlyName" => "启用升级永久功能",
+            "Type" => "yesno",
+            "Default" => "yes",
+            "Description" => "允许用户通过好友助力将非永久域名升级为永久域名",
+        ],
+        "upgrade_permanent_required_helpers" => [
+            "FriendlyName" => "升级永久所需助力人数",
+            "Type" => "text",
+            "Size" => "5",
+            "Default" => "5",
+            "Description" => "用户需要多少个好友助力才能升级为永久（建议3-10人）",
+        ],
         "risk_scan_enabled" => [
                 "FriendlyName" => "启用周期性风险扫描",
                 "Type" => "yesno",

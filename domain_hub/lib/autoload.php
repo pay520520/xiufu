@@ -23,6 +23,7 @@ spl_autoload_register(static function (string $class): void {
         'CfVpnDetectionService' => __DIR__ . '/Services/VpnDetectionService.php',
         'CfInviteRegistrationService' => __DIR__ . '/Services/InviteRegistrationService.php',
         'CfRenewalNoticeService' => __DIR__ . '/Services/RenewalNoticeService.php',
+        'CfUpgradePermanentService' => __DIR__ . '/Services/UpgradePermanentService.php',
 
         'CfRateLimiter' => __DIR__ . '/Services/RateLimiter.php',
         'CfModuleSettings' => __DIR__ . '/Support/ModuleSettings.php',
