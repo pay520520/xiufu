@@ -49,14 +49,81 @@ curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&act
 **操作：** `list`  
 **方法：** `GET`
 
-**请求示例：**
+**查询参数：**
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| page | integer | 否 | 1 | 页码（从1开始） |
+| per_page | integer | 否 | 200 | 每页数量（1-500） |
+| include_total | boolean | 否 | false | 是否返回总数（大数据量时较慢） |
+| search | string | 否 | - | 搜索关键词（匹配subdomain或rootdomain） |
+| rootdomain | string | 否 | - | 按根域名过滤 |
+| status | string | 否 | - | 按状态过滤（active/suspended/expired） |
+| created_from | string | 否 | - | 创建时间起始（YYYY-MM-DD） |
+| created_to | string | 否 | - | 创建时间结束（YYYY-MM-DD） |
+| sort_by | string | 否 | id | 排序字段（id/created_at/updated_at/expires_at/subdomain） |
+| sort_dir | string | 否 | desc | 排序方向（asc/desc） |
+| fields | string | 否 | all | 返回字段（逗号分隔，如：id,subdomain,status） |
+
+**基础请求示例：**
 ```bash
+# 默认获取第1页（200条）
 curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&action=list" \
   -H "X-API-Key: cfsd_xxxxxxxxxx" \
   -H "X-API-Secret: yyyyyyyyyyyy"
 ```
 
-**响应示例：**
+**分页请求示例：**
+```bash
+# 获取第1页（每页100条）
+curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&action=list&page=1&per_page=100" \
+  -H "X-API-Key: cfsd_xxxxxxxxxx" \
+  -H "X-API-Secret: yyyyyyyyyyyy"
+
+# 获取第2页并返回总数
+curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&action=list&page=2&per_page=100&include_total=1" \
+  -H "X-API-Key: cfsd_xxxxxxxxxx" \
+  -H "X-API-Secret: yyyyyyyyyyyy"
+```
+
+**搜索和过滤示例：**
+```bash
+# 搜索包含"test"的域名
+curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&action=list&search=test" \
+  -H "X-API-Key: cfsd_xxxxxxxxxx" \
+  -H "X-API-Secret: yyyyyyyyyyyy"
+
+# 只查看example.com的域名
+curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&action=list&rootdomain=example.com" \
+  -H "X-API-Key: cfsd_xxxxxxxxxx" \
+  -H "X-API-Secret: yyyyyyyyyyyy"
+
+# 查看已暂停的域名
+curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&action=list&status=suspended" \
+  -H "X-API-Key: cfsd_xxxxxxxxxx" \
+  -H "X-API-Secret: yyyyyyyyyyyy"
+
+# 查看2025年1月创建的域名
+curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&action=list&created_from=2025-01-01&created_to=2025-01-31" \
+  -H "X-API-Key: cfsd_xxxxxxxxxx" \
+  -H "X-API-Secret: yyyyyyyyyyyy"
+
+# 按过期时间升序排列
+curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&action=list&sort_by=expires_at&sort_dir=asc" \
+  -H "X-API-Key: cfsd_xxxxxxxxxx" \
+  -H "X-API-Secret: yyyyyyyyyyyy"
+
+# 组合查询：搜索test开头的active状态域名，按创建时间倒序，每页50条
+curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&action=list&search=test&status=active&sort_by=created_at&sort_dir=desc&per_page=50" \
+  -H "X-API-Key: cfsd_xxxxxxxxxx" \
+  -H "X-API-Secret: yyyyyyyyyyyy"
+
+# 只返回ID和域名字段（减少数据传输）
+curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&action=list&fields=id,subdomain,rootdomain,status" \
+  -H "X-API-Key: cfsd_xxxxxxxxxx" \
+  -H "X-API-Secret: yyyyyyyyyyyy"
+```
+
+**基础响应示例：**
 ```json
 {
   "success": true,
@@ -83,6 +150,42 @@ curl -X GET "https://您的域名/index.php?m=domain_hub&endpoint=subdomains&act
   ]
 }
 ```
+
+**分页响应示例：**
+```json
+{
+  "success": true,
+  "count": 100,
+  "subdomains": [
+    {
+      "id": 201,
+      "subdomain": "app201",
+      "rootdomain": "example.com",
+      "full_domain": "app201.example.com",
+      "status": "active",
+      "created_at": "2025-10-19 10:00:00",
+      "updated_at": "2025-10-19 10:00:00"
+    }
+    // ... 99 more items
+  ],
+  "pagination": {
+    "page": 2,
+    "per_page": 100,
+    "has_more": true,
+    "next_page": 3,
+    "prev_page": 1,
+    "total": 12500
+  }
+}
+```
+
+**性能优化建议：**
+- 默认每页200条，建议根据需求调整`per_page`（推荐50-100）
+- `include_total=1`会执行COUNT查询，数据量大时可能较慢，仅在必要时使用
+- 通过`pagination.has_more`判断是否有下一页，比依赖`total`更高效
+- 使用`fields`参数可以显著减少数据传输量
+- 最大`per_page=500`，超过会自动限制为500
+- 对于1万+域名，建议使用搜索和过滤功能精确定位目标域名
 
 ---
 

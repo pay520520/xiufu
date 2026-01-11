@@ -1033,6 +1033,85 @@ class CfClientController
                                 }
                             }
 
+                            // 升级永久功能
+                            if (in_array($action, ['get_upgrade_info', 'help_upgrade'], true)) {
+                                try {
+                                    if (!class_exists('CfUpgradePermanentService')) {
+                                        throw new \RuntimeException('升级永久功能未启用');
+                                    }
+                                    
+                                    $settings = cf_get_module_settings_cached();
+                                    if (!cfmod_setting_enabled($settings['upgrade_permanent_enabled'] ?? 'yes')) {
+                                        throw new \RuntimeException('升级永久功能已关闭');
+                                    }
+                                    
+                                    if ($action === 'get_upgrade_info') {
+                                        $subdomainId = intval($_GET['subdomain_id'] ?? 0);
+                                        $subdomain = Capsule::table('mod_cloudflare_subdomain')
+                                            ->where('id', $subdomainId)
+                                            ->where('userid', $userId)
+                                            ->first();
+                                        
+                                        if (!$subdomain) {
+                                            throw new \RuntimeException('域名不存在');
+                                        }
+                                        
+                                        if ($subdomain->never_expires == 1) {
+                                            throw new \RuntimeException('该域名已经是永久域名');
+                                        }
+                                        
+                                        $requiredHelpers = max(1, intval($settings['upgrade_permanent_required_helpers'] ?? 5));
+                                        $config = CfUpgradePermanentService::ensureUpgradeConfig(
+                                            $subdomainId,
+                                            $userId,
+                                            $requiredHelpers
+                                        );
+                                        
+                                        $helpers = CfUpgradePermanentService::getHelpers($subdomainId);
+                                        
+                                        echo json_encode([
+                                            'success' => true,
+                                            'upgrade_code' => $config['upgrade_code'],
+                                            'current_helpers' => $config['current_helpers'],
+                                            'required_helpers' => $config['required_helpers'],
+                                            'upgraded' => !empty($config['upgraded_at']),
+                                            'helpers' => $helpers,
+                                        ], JSON_UNESCAPED_UNICODE);
+                                        exit;
+                                    }
+                                    
+                                    if ($action === 'help_upgrade') {
+                                        $upgradeCode = trim($_POST['upgrade_code'] ?? '');
+                                        
+                                        $user = Capsule::table('tblclients')->where('id', $userId)->first();
+                                        if (!$user) {
+                                            throw new \RuntimeException('用户不存在');
+                                        }
+                                        
+                                        $result = CfUpgradePermanentService::helpUpgrade(
+                                            $userId,
+                                            $user->email,
+                                            $upgradeCode,
+                                            $_SERVER['REMOTE_ADDR'] ?? ''
+                                        );
+                                        
+                                        echo json_encode([
+                                            'success' => true,
+                                            'current_helpers' => $result['current_helpers'],
+                                            'required_helpers' => $result['required_helpers'],
+                                            'upgraded' => $result['upgraded'],
+                                        ], JSON_UNESCAPED_UNICODE);
+                                        exit;
+                                    }
+                                } catch (\Throwable $e) {
+                                    echo json_encode([
+                                        'success' => false,
+                                        'message' => $e->getMessage(),
+                                    ], JSON_UNESCAPED_UNICODE);
+                                    exit;
+                                }
+                            }
+
                             // 轻量接口：实时排行榜（当前周期 Top N）
                             if ($action === 'realtime_top') {
                                 try {

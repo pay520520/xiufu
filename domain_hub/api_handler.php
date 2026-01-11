@@ -1144,7 +1144,62 @@ function handleApiRequest(){
 
                 $baseQuery = Capsule::table('mod_cloudflare_subdomain')
                     ->where('userid', $keyRow->userid);
-                $dataQuery = (clone $baseQuery)->orderBy('id', 'desc');
+
+                // 搜索关键词过滤
+                $searchKeyword = trim($_GET['search'] ?? ($data['search'] ?? ''));
+                if ($searchKeyword !== '') {
+                    $baseQuery->where(function($q) use ($searchKeyword) {
+                        $q->where('subdomain', 'like', '%' . $searchKeyword . '%')
+                          ->orWhere('rootdomain', 'like', '%' . $searchKeyword . '%');
+                    });
+                }
+
+                // 根域名过滤
+                $filterRoot = trim($_GET['rootdomain'] ?? ($data['rootdomain'] ?? ''));
+                if ($filterRoot !== '') {
+                    $baseQuery->where('rootdomain', strtolower($filterRoot));
+                }
+
+                // 状态过滤
+                $filterStatus = trim($_GET['status'] ?? ($data['status'] ?? ''));
+                if ($filterStatus !== '' && in_array($filterStatus, ['active', 'suspended', 'expired'], true)) {
+                    $baseQuery->where('status', $filterStatus);
+                }
+
+                // 创建时间范围过滤
+                $dateFrom = trim($_GET['created_from'] ?? ($data['created_from'] ?? ''));
+                if ($dateFrom !== '' && strtotime($dateFrom) !== false) {
+                    $baseQuery->where('created_at', '>=', $dateFrom . ' 00:00:00');
+                }
+                $dateTo = trim($_GET['created_to'] ?? ($data['created_to'] ?? ''));
+                if ($dateTo !== '' && strtotime($dateTo) !== false) {
+                    $baseQuery->where('created_at', '<=', $dateTo . ' 23:59:59');
+                }
+
+                // 字段选择
+                $fieldsParam = trim($_GET['fields'] ?? ($data['fields'] ?? ''));
+                $allowedFields = ['id', 'subdomain', 'rootdomain', 'status', 'created_at', 'updated_at', 'expires_at', 'never_expires', 'cloudflare_zone_id', 'provider_account_id'];
+                $selectFields = $allowedFields;
+                if ($fieldsParam !== '' && $fieldsParam !== 'all') {
+                    $requestedFields = array_map('trim', explode(',', $fieldsParam));
+                    $selectFields = array_intersect($requestedFields, $allowedFields);
+                    if (empty($selectFields) || !in_array('id', $selectFields)) {
+                        $selectFields = ['id'];
+                    }
+                }
+
+                // 排序选项
+                $sortBy = trim($_GET['sort_by'] ?? ($data['sort_by'] ?? 'id'));
+                $sortDir = strtolower(trim($_GET['sort_dir'] ?? ($data['sort_dir'] ?? 'desc')));
+                $allowedSort = ['id', 'created_at', 'updated_at', 'expires_at', 'subdomain'];
+                if (!in_array($sortBy, $allowedSort, true)) {
+                    $sortBy = 'id';
+                }
+                if (!in_array($sortDir, ['asc', 'desc'], true)) {
+                    $sortDir = 'desc';
+                }
+
+                $dataQuery = (clone $baseQuery)->select($selectFields)->orderBy($sortBy, $sortDir);
                 $subsCollection = $dataQuery
                     ->offset($offset)
                     ->limit($perPage + 1)
